@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Yoga Team Studio | Prototipo fase 1</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#inicio" data-route="inicio">
+        <span class="brand-mark">LY</span>
+        <span>Yoga Team</span>
+      </a>
+      <nav class="main-nav" aria-label="Navegacion principal">
+        <a href="#inicio" data-route="inicio">Inicio</a>
+        <a href="#sobre" data-route="sobre">Profesora</a>
+        <a href="#clases" data-route="clases">Clases</a>
+        <a href="#contenido" data-route="contenido">Contenido</a>
+        <a href="#contacto" data-route="contacto">Contacto</a>
+      </nav>
+      <div class="header-actions">
+        <button class="ghost-button" id="loginButton" type="button">Entrar</button>
+        <button class="primary-button" id="dashboardButton" type="button">Mi espacio</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="view home-view" id="view-inicio" data-view="inicio">
+        <div class="hero-view">
+          <div class="hero-media" role="img" aria-label="Estudio de yoga sereno con luz natural"></div>
+          <div class="hero-content">
+            <p class="eyebrow">Prototipo fase 1</p>
+            <h1>Yoga Team Studio</h1>
+            <p>Una web de yoga con zona privada, clases en video, audios de meditacion y contenido premium gestionado desde un panel sencillo.</p>
+            <div class="hero-actions">
+              <button class="primary-button" type="button" data-route="contenido">Ver contenido</button>
+              <button class="secondary-button" type="button" data-route="clases">Explorar clases</button>
+            </div>
+          </div>
+        </div>
+        <div class="home-preview">
+          <div class="section-heading">
+            <p class="eyebrow">Primera version</p>
+            <h2>Todo listo para ensenar la idea y decidir estilo</h2>
+          </div>
+          <div class="service-grid">
+            <article class="service-card">
+              <span>01</span>
+              <h3>Web publica</h3>
+              <p>Inicio, profesora, clases, contenido gratuito y contacto para presentar el proyecto.</p>
+            </article>
+            <article class="service-card">
+              <span>02</span>
+              <h3>Zona privada</h3>
+              <p>Acceso para alumnas con biblioteca de videos y audios separados por tipo y categoria.</p>
+            </article>
+            <article class="service-card">
+              <span>03</span>
+              <h3>Panel profesora</h3>
+              <p>Subida demo de contenido, premium manual y gestion de usuarios para validar el flujo.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="view content-band" id="view-sobre" data-view="sobre" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">La profesora</p>
+          <h2>Una guia cercana para practicar a tu ritmo</h2>
+        </div>
+        <div class="teacher-profile">
+          <div class="teacher-photo" aria-label="Retrato provisional de la profesora de yoga">
+            <span>Profesora</span>
+          </div>
+          <div class="teacher-copy">
+            <p class="lead">Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.</p>
+            <p>La idea es que la pagina transmita calma, confianza y profesionalidad</p>
+            <div class="teacher-stats">
+              <div><strong>+120</strong><span>clases guiadas</span></div>
+              <div><strong>4</strong><span>areas de practica</span></div>
+              <div><strong>Online</strong><span>desde casa</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="teacher-method">
+          <article class="method-card">
+            <h3>Practica amable</h3>
+            <p>Sesiones pensadas para volver al cuerpo sin exigencia, con progresiones claras y opciones sencillas.</p>
+          </article>
+          <article class="method-card">
+            <h3>Respiracion y calma</h3>
+            <p>Audios y ejercicios breves para regular energia, descansar mejor y sostener una rutina realista.</p>
+          </article>
+          <article class="method-card">
+            <h3>Contenido premium</h3>
+            <p>Una biblioteca privada para alumnas que quieren seguir practicando con acompanamiento constante.</p>
+          </article>
+        </div>
+        <div class="teacher-cta">
+          <div>
+            <p class="eyebrow">Zona privada</p>
+            <h3>Miriam podra subir videos y audios desde su panel</h3>
+          </div>
+          <button class="primary-button" type="button" data-route="dashboard">Ver panel demo</button>
+        </div>
+      </section>
+
+      <section class="view content-band" id="view-clases" data-view="clases" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Servicios</p>
+          <h2>Clases y acompanamiento</h2>
+        </div>
+        <div class="service-grid">
+          <article class="service-card">
+            <span>01</span>
+            <h3>Yoga online</h3>
+            <p>Videos organizados por nivel, duracion y objetivo.</p>
+          </article>
+          <article class="service-card">
+            <span>02</span>
+            <h3>Meditacion</h3>
+            <p>Audios para descanso, foco, respiracion y calma.</p>
+          </article>
+          <article class="service-card">
+            <span>03</span>
+            <h3>Premium</h3>
+            <p>Contenido privado para alumnas con acceso activo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="view content-band" id="view-contenido" data-view="contenido" hidden>
+        <div class="toolbar-heading">
+          <div>
+            <p class="eyebrow">Biblioteca</p>
+            <h2>Contenido gratuito y premium</h2>
+          </div>
+          <div class="filter-row" aria-label="Filtros de contenido">
+            <select id="typeFilter" aria-label="Filtrar por tipo">
+              <option value="all">Todo</option>
+              <option value="video">Videos</option>
+              <option value="audio">Audios</option>
+            </select>
+            <select id="categoryFilter" aria-label="Filtrar por categoria">
+              <option value="all">Categorias</option>
+              <option value="Yoga">Yoga</option>
+              <option value="Meditacion">Meditacion</option>
+              <option value="Respiracion">Respiracion</option>
+              <option value="Relajacion">Relajacion</option>
+            </select>
+          </div>
+        </div>
+        <div class="content-grid" id="contentGrid"></div>
+      </section>
+
+      <section class="view content-band" id="view-contacto" data-view="contacto" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Contacto</p>
+          <h2>Reserva y dudas</h2>
+        </div>
+        <form class="contact-form">
+          <label>Nombre<input type="text" placeholder="Tu nombre"></label>
+          <label>Email<input type="email" placeholder="tu@email.com"></label>
+          <label>Mensaje<textarea rows="5" placeholder="Cuentame que necesitas"></textarea></label>
+          <button class="primary-button" type="button">Enviar consulta</button>
+        </form>
+      </section>
+
+      <section class="view app-shell" id="view-dashboard" data-view="dashboard" hidden>
+        <aside class="sidebar">
+          <h2>Mi espacio</h2>
+          <button type="button" class="side-link active" data-panel="library">Biblioteca</button>
+          <button type="button" class="side-link" data-panel="profile">Perfil</button>
+          <button type="button" class="side-link admin-only" data-panel="admin">Panel profesora</button>
+          <button type="button" class="side-link admin-only" data-panel="users">Usuarios</button>
+          <button type="button" class="side-link danger" id="logoutButton">Salir</button>
+        </aside>
+        <section class="workspace">
+          <div class="workspace-top">
+            <div>
+              <p class="eyebrow" id="sessionRole">Usuario</p>
+              <h2 id="welcomeTitle">Bienvenida</h2>
+            </div>
+            <span class="status-pill" id="premiumStatus">Gratis</span>
+          </div>
+
+          <div class="panel-view" id="panel-library">
+            <div class="content-grid compact" id="dashboardGrid"></div>
+          </div>
+
+          <div class="panel-view" id="panel-profile" hidden>
+            <div class="soft-panel">
+              <h3>Perfil</h3>
+              <p id="profileText"></p>
+              <button class="secondary-button" type="button" id="togglePremiumSelf">Simular premium</button>
+            </div>
+          </div>
+
+          <div class="panel-view" id="panel-admin" hidden>
+            <form class="admin-form" id="contentForm">
+              <h3>Subir contenido</h3>
+              <label>Titulo<input id="itemTitle" required placeholder="Clase suave de manana"></label>
+              <label>Descripcion<textarea id="itemDescription" rows="3" placeholder="Breve descripcion"></textarea></label>
+              <div class="form-grid">
+                <label>Tipo
+                  <select id="itemType">
+                    <option value="video">Video</option>
+                    <option value="audio">Audio</option>
+                  </select>
+                </label>
+                <label>Categoria
+                  <select id="itemCategory">
+                    <option>Yoga</option>
+                    <option>Meditacion</option>
+                    <option>Respiracion</option>
+                    <option>Relajacion</option>
+                  </select>
+                </label>
+                <label>Nivel
+                  <select id="itemLevel">
+                    <option>Principiante</option>
+                    <option>Intermedio</option>
+                    <option>Avanzado</option>
+                  </select>
+                </label>
+                <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
+              </div>
+              <label>Archivo de prueba<input id="itemFile" type="file" accept="audio/*,video/*"></label>
+              <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>
+              <div class="preview-options">
+                <label class="check-row"><input id="itemPreview" type="checkbox"> Permitir trailer para usuarios gratis</label>
+                <label>Duracion del trailer<input id="itemPreviewDuration" placeholder="2 min"></label>
+              </div>
+              <button class="primary-button" type="submit">Guardar contenido</button>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Titulo</th><th>Tipo</th><th>Acceso</th><th>Trailer</th><th></th></tr>
+                </thead>
+                <tbody id="adminContentRows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel-view" id="panel-users" hidden>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Usuario</th><th>Rol</th><th>Premium</th><th>Accion</th></tr>
+                </thead>
+                <tbody id="userRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="auth-dialog" id="authDialog">
+      <form method="dialog" class="auth-card" id="authForm">
+        <button class="icon-button" id="closeAuthButton" type="button" aria-label="Cerrar">x</button>
+        <p class="eyebrow">Acceso demo</p>
+        <h2>Entrar a Yoga Team</h2>
+        <label>Email<input id="emailInput" type="email" value="alumna@demo.com"></label>
+        <label>Tipo de acceso
+          <select id="roleInput">
+            <option value="user">Alumna</option>
+            <option value="teacher">Profesora/admin</option>
+          </select>
+        </label>
+        <label class="check-row"><input id="premiumInput" type="checkbox"> Entrar como premium</label>
+        <button class="primary-button" type="submit">Entrar</button>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>
