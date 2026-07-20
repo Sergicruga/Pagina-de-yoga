@@ -398,6 +398,17 @@ label {
   padding: 18px;
 }
 
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-self: end;
+}
+
+.card-actions button {
+  flex: 1 1 160px;
+}
+
 .media-thumb {
   display: grid;
   min-height: 132px;
@@ -437,6 +448,11 @@ label {
 .chip.preview {
   background: #ece8f1;
   color: var(--lavender);
+}
+
+.chip.price {
+  background: #f1ece5;
+  color: var(--ink);
 }
 
 .preview-note {
@@ -576,6 +592,22 @@ th {
   display: grid;
   gap: 15px;
   padding: 28px;
+}
+
+.auth-helper,
+.auth-note {
+  margin: -4px 0 2px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.auth-note {
+  margin: 0;
+  border-radius: 8px;
+  background: #eef1ea;
+  padding: 12px 13px;
+  color: var(--sage-dark);
+  font-weight: 760;
 }
 
 .icon-button {

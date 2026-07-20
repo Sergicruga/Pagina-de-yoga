@@ -9,6 +9,7 @@ const seedItems = [
     category: "Yoga",
     level: "Principiante",
     duration: "22 min",
+    price: 0,
     premium: false,
     previewEnabled: false,
     previewDuration: "",
@@ -22,6 +23,7 @@ const seedItems = [
     category: "Meditacion",
     level: "Principiante",
     duration: "14 min",
+    price: 0,
     premium: false,
     previewEnabled: false,
     previewDuration: "",
@@ -35,6 +37,7 @@ const seedItems = [
     category: "Respiracion",
     level: "Intermedio",
     duration: "11 min",
+    price: 4,
     premium: true,
     previewEnabled: true,
     previewDuration: "2 min",
@@ -48,6 +51,7 @@ const seedItems = [
     category: "Yoga",
     level: "Intermedio",
     duration: "38 min",
+    price: 9,
     premium: true,
     previewEnabled: true,
     previewDuration: "4 min",
@@ -56,9 +60,9 @@ const seedItems = [
 ];
 
 const seedUsers = [
-  { email: "alumna@demo.com", role: "user", premium: false },
-  { email: "premium@demo.com", role: "user", premium: true },
-  { email: "profesora@demo.com", role: "teacher", premium: true }
+  { email: "alumna@demo.com", role: "user", premium: false, purchases: [] },
+  { email: "premium@demo.com", role: "user", premium: true, purchases: [] },
+  { email: "profesora@demo.com", role: "teacher", premium: true, purchases: [] }
 ];
 
 const state = loadState();
@@ -69,7 +73,7 @@ const authDialog = document.querySelector("#authDialog");
 const authForm = document.querySelector("#authForm");
 const closeAuthButton = document.querySelector("#closeAuthButton");
 const loginButton = document.querySelector("#loginButton");
-const dashboardButton = document.querySelector("#dashboardButton");
+const registerButton = document.querySelector("#registerButton");
 const logoutButton = document.querySelector("#logoutButton");
 const contentGrid = document.querySelector("#contentGrid");
 const dashboardGrid = document.querySelector("#dashboardGrid");
@@ -79,11 +83,13 @@ const contentForm = document.querySelector("#contentForm");
 const adminRows = document.querySelector("#adminContentRows");
 const userRows = document.querySelector("#userRows");
 const toast = document.querySelector("#toast");
+let authMode = "login";
 
 function loadState() {
   const saved = localStorage.getItem(storageKey);
   if (saved) {
-    return normalizeState(JSON.parse(saved));
+    const parsed = normalizeState(JSON.parse(saved));
+    return { ...parsed, session: null };
   }
 
   return normalizeState({
@@ -98,8 +104,13 @@ function normalizeState(savedState) {
     ...savedState,
     items: savedState.items.map((item) => ({
       ...item,
+      price: item.price ?? (item.premium ? 6 : 0),
       previewEnabled: item.previewEnabled ?? (item.premium && ["item-3", "item-4"].includes(item.id)),
       previewDuration: item.previewDuration ?? (item.id === "item-4" ? "4 min" : "2 min")
+    })),
+    users: savedState.users.map((user) => ({
+      ...user,
+      purchases: user.purchases || []
     }))
   };
 }
@@ -119,7 +130,7 @@ function isTeacher() {
 
 function canOpen(item) {
   const user = currentUser();
-  return !item.premium || user?.premium || user?.role === "teacher";
+  return !item.premium || user?.premium || user?.role === "teacher" || user?.purchases?.includes(item.id);
 }
 
 function showView(route) {
@@ -165,16 +176,14 @@ function renderPublicContent() {
 }
 
 function contentCard(item) {
+  const user = currentUser();
   const locked = !canOpen(item);
   const hasPreview = locked && item.previewEnabled;
+  const canBuySingle = locked && item.premium && item.price > 0;
   const typeLabel = item.type === "video" ? "Video" : "Audio";
   const symbol = item.type === "video" ? "play" : "audio";
-  const actionText = locked
-    ? hasPreview
-      ? `Ver trailer ${item.previewDuration || ""}`.trim()
-      : "Necesitas premium"
-    : "Abrir contenido";
-  const actionAttribute = hasPreview ? `data-preview-item="${item.id}"` : `data-open-item="${item.id}"`;
+  const boughtSingle = Boolean(user?.purchases?.includes(item.id));
+  const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
 
   return `
     <article class="content-card ${locked ? "locked" : ""}">
@@ -183,16 +192,20 @@ function contentCard(item) {
         <span class="chip">${typeLabel}</span>
         <span class="chip">${item.category}</span>
         <span class="chip">${item.level}</span>
-        <span class="chip ${item.premium ? "premium" : ""}">${item.premium ? "Premium" : "Gratis"}</span>
+        <span class="chip ${item.premium ? "premium" : ""}">${accessText}</span>
         ${item.premium && item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
+        ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml(item.description)}</p>
-      ${hasPreview ? `<p class="preview-note">Puedes ver una muestra antes de hacerte premium.</p>` : ""}
+      ${locked ? `<p class="preview-note">Puedes comprar este contenido suelto o activar la suscripcion completa.</p>` : ""}
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(item.fileName || "archivo-demo")}</p>
-      <button class="${locked ? "secondary-button" : "primary-button"}" type="button" ${actionAttribute}>
-        ${escapeHtml(actionText)}
-      </button>
+      <div class="card-actions">
+        ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
+        ${hasPreview ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
+        ${canBuySingle ? `<button class="primary-button" type="button" data-buy-item="${item.id}">Comprar ${escapeHtml(formatPrice(item.price))}</button>` : ""}
+        ${locked ? `<button class="secondary-button" type="button" data-subscribe>Suscribirme</button>` : ""}
+      </div>
     </article>
   `;
 }
@@ -203,7 +216,8 @@ function renderDashboard() {
   document.querySelector("#sessionRole").textContent = user.role === "teacher" ? "Profesora" : "Alumna";
   document.querySelector("#premiumStatus").textContent = user.premium ? "Premium activo" : "Plan gratis";
   document.querySelector("#premiumStatus").classList.toggle("premium", user.premium);
-  document.querySelector("#profileText").textContent = `Email: ${user.email}. Acceso: ${user.premium ? "premium" : "gratis"}.`;
+  const purchasedCount = user.purchases?.length || 0;
+  document.querySelector("#profileText").textContent = `Email: ${user.email}. Acceso: ${user.premium ? "suscripcion premium" : "plan gratis"}. Compras individuales: ${purchasedCount}.`;
 
   document.querySelectorAll(".admin-only").forEach((element) => {
     element.hidden = !isTeacher();
@@ -220,6 +234,7 @@ function renderAdminRows() {
       <td>${escapeHtml(item.title)}</td>
       <td>${item.type === "video" ? "Video" : "Audio"}</td>
       <td>${item.premium ? "Premium" : "Gratis"}</td>
+      <td>${item.premium && item.price > 0 ? escapeHtml(formatPrice(item.price)) : "-"}</td>
       <td>${item.previewEnabled ? escapeHtml(item.previewDuration || "Si") : "No"}</td>
       <td><button class="secondary-button" type="button" data-delete-item="${item.id}">Eliminar</button></td>
     </tr>
@@ -246,14 +261,21 @@ function showPanel(panelName) {
   });
 }
 
-function login(email, role, premium) {
+function login(email) {
   let user = state.users.find((entry) => entry.email === email);
   if (!user) {
-    user = { email, role, premium };
+    user = {
+      email,
+      role: "user",
+      premium: false,
+      purchases: [],
+      name: document.querySelector("#nameInput").value.trim()
+    };
     state.users.push(user);
   } else {
-    user.role = role;
-    user.premium = premium || user.premium || role === "teacher";
+    user.role = user.role || "user";
+    user.premium = Boolean(user.premium || user.role === "teacher");
+    user.purchases = user.purchases || [];
   }
   state.session = { email };
   saveState();
@@ -262,10 +284,33 @@ function login(email, role, premium) {
   window.location.hash = "dashboard";
 }
 
+function formatPrice(value) {
+  return `${Number(value || 0).toFixed(2).replace(".", ",")} EUR`;
+}
+
 function updateHeader() {
   const user = currentUser();
-  loginButton.textContent = user ? user.email : "Entrar";
-  dashboardButton.textContent = user ? "Mi espacio" : "Crear acceso";
+  loginButton.textContent = user ? user.email : "Iniciar sesion";
+  registerButton.textContent = user ? "Mi espacio" : "Registrarse";
+}
+
+function openAuthDialog(mode) {
+  authMode = mode;
+  const isRegister = mode === "register";
+  document.querySelector("#authEyebrow").textContent = isRegister ? "Crear cuenta" : "Acceso demo";
+  document.querySelector("#authTitle").textContent = isRegister ? "Registrarse" : "Iniciar sesion";
+  document.querySelector("#authHelper").textContent = isRegister
+    ? "Crea una cuenta gratuita y entra directamente a tu espacio privado."
+    : "Entra con tu email para acceder a tu espacio privado.";
+  document.querySelector("#authNote").textContent = isRegister
+    ? "Las nuevas cuentas se crean como alumnas. El acceso premium lo activa la profesora."
+    : "Demo: usa profesora@demo.com para entrar como profesora.";
+  document.querySelector("#authSubmitButton").textContent = isRegister ? "Crear cuenta" : "Entrar";
+  document.querySelectorAll(".register-only").forEach((element) => {
+    element.hidden = !isRegister;
+  });
+  document.querySelector("#emailInput").value = isRegister ? "" : "alumna@demo.com";
+  authDialog.showModal();
 }
 
 function notify(message) {
@@ -286,6 +331,12 @@ function escapeHtml(value) {
 }
 
 document.body.addEventListener("click", (event) => {
+  const authButton = event.target.closest("[data-auth-mode]");
+  if (authButton) {
+    openAuthDialog(authButton.dataset.authMode);
+    return;
+  }
+
   const routeButton = event.target.closest("[data-route]");
   if (routeButton) {
     window.location.hash = routeButton.dataset.route;
@@ -312,6 +363,40 @@ document.body.addEventListener("click", (event) => {
     notify(`Reproduciendo trailer de ${item.title}. Despues se invita a activar premium.`);
   }
 
+  const buyButton = event.target.closest("[data-buy-item]");
+  if (buyButton) {
+    const item = state.items.find((entry) => entry.id === buyButton.dataset.buyItem);
+    if (!state.session) {
+      openAuthDialog("login");
+      notify("Inicia sesion para comprar este contenido.");
+      return;
+    }
+    const user = currentUser();
+    user.purchases = user.purchases || [];
+    if (!user.purchases.includes(item.id)) {
+      user.purchases.push(item.id);
+    }
+    saveState();
+    renderDashboard();
+    renderPublicContent();
+    notify(`Compra simulada: ${item.title} queda desbloqueado para tu cuenta.`);
+  }
+
+  const subscribeButton = event.target.closest("[data-subscribe]");
+  if (subscribeButton) {
+    if (!state.session) {
+      openAuthDialog("login");
+      notify("Inicia sesion para activar la suscripcion.");
+      return;
+    }
+    const user = currentUser();
+    user.premium = true;
+    saveState();
+    renderDashboard();
+    renderPublicContent();
+    notify("Suscripcion simulada activada. Ya puedes ver todo el contenido premium.");
+  }
+
   const deleteButton = event.target.closest("[data-delete-item]");
   if (deleteButton) {
     const index = state.items.findIndex((entry) => entry.id === deleteButton.dataset.deleteItem);
@@ -330,11 +415,17 @@ document.body.addEventListener("click", (event) => {
   }
 });
 
-loginButton.addEventListener("click", () => authDialog.showModal());
+loginButton.addEventListener("click", () => {
+  if (state.session) {
+    window.location.hash = "dashboard";
+    return;
+  }
+  openAuthDialog("login");
+});
 closeAuthButton.addEventListener("click", () => authDialog.close());
-dashboardButton.addEventListener("click", () => {
+registerButton.addEventListener("click", () => {
   if (!state.session) {
-    authDialog.showModal();
+    openAuthDialog("register");
     return;
   }
   window.location.hash = "dashboard";
@@ -353,11 +444,9 @@ logoutButton.addEventListener("click", () => {
 
 authForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const email = document.querySelector("#emailInput").value.trim() || "alumna@demo.com";
-  const role = document.querySelector("#roleInput").value;
-  const premium = document.querySelector("#premiumInput").checked || role === "teacher";
+  const email = document.querySelector("#emailInput").value.trim() || (authMode === "register" ? "nueva@demo.com" : "alumna@demo.com");
   authDialog.close();
-  login(email, role, premium);
+  login(email);
 });
 
 contentForm.addEventListener("submit", (event) => {
@@ -371,6 +460,7 @@ contentForm.addEventListener("submit", (event) => {
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
     duration: document.querySelector("#itemDuration").value || "Sin duracion",
+    price: Number(document.querySelector("#itemPrice").value || 0),
     premium: document.querySelector("#itemPremium").checked,
     previewEnabled: document.querySelector("#itemPreview").checked,
     previewDuration: document.querySelector("#itemPreviewDuration").value || "2 min",

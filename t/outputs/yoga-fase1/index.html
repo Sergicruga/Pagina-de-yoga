@@ -20,8 +20,8 @@
         <a href="#contacto" data-route="contacto">Contacto</a>
       </nav>
       <div class="header-actions">
-        <button class="ghost-button" id="loginButton" type="button">Entrar</button>
-        <button class="primary-button" id="dashboardButton" type="button">Mi espacio</button>
+        <button class="ghost-button" id="loginButton" type="button">Iniciar sesion</button>
+        <button class="primary-button" id="registerButton" type="button">Registrarse</button>
       </div>
     </header>
 
@@ -34,7 +34,9 @@
             <h1>Yoga Team Studio</h1>
             <p>Una web de yoga con zona privada, clases en video, audios de meditacion y contenido premium gestionado desde un panel sencillo.</p>
             <div class="hero-actions">
-              <button class="primary-button" type="button" data-route="contenido">Ver contenido</button>
+              <button class="primary-button" type="button" data-auth-mode="register">Crear cuenta gratis</button>
+              <button class="secondary-button" type="button" data-auth-mode="login">Iniciar sesion</button>
+              <button class="secondary-button" type="button" data-route="contenido">Ver contenido</button>
               <button class="secondary-button" type="button" data-route="clases">Explorar clases</button>
             </div>
           </div>
@@ -225,6 +227,7 @@
                   </select>
                 </label>
                 <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
+                <label>Precio individual<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
               </div>
               <label>Archivo de prueba<input id="itemFile" type="file" accept="audio/*,video/*"></label>
               <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>
@@ -237,7 +240,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Titulo</th><th>Tipo</th><th>Acceso</th><th>Trailer</th><th></th></tr>
+                  <tr><th>Titulo</th><th>Tipo</th><th>Acceso</th><th>Precio</th><th>Trailer</th><th></th></tr>
                 </thead>
                 <tbody id="adminContentRows"></tbody>
               </table>
@@ -261,17 +264,13 @@
     <dialog class="auth-dialog" id="authDialog">
       <form method="dialog" class="auth-card" id="authForm">
         <button class="icon-button" id="closeAuthButton" type="button" aria-label="Cerrar">x</button>
-        <p class="eyebrow">Acceso demo</p>
-        <h2>Entrar a Yoga Team</h2>
+        <p class="eyebrow" id="authEyebrow">Acceso demo</p>
+        <h2 id="authTitle">Iniciar sesion</h2>
+        <p class="auth-helper" id="authHelper">Entra con tu email para acceder a tu espacio privado.</p>
+        <label class="register-only">Nombre<input id="nameInput" type="text" placeholder="Tu nombre"></label>
         <label>Email<input id="emailInput" type="email" value="alumna@demo.com"></label>
-        <label>Tipo de acceso
-          <select id="roleInput">
-            <option value="user">Alumna</option>
-            <option value="teacher">Profesora/admin</option>
-          </select>
-        </label>
-        <label class="check-row"><input id="premiumInput" type="checkbox"> Entrar como premium</label>
-        <button class="primary-button" type="submit">Entrar</button>
+        <p class="auth-note" id="authNote">Demo: usa profesora@demo.com para entrar como profesora.</p>
+        <button class="primary-button" id="authSubmitButton" type="submit">Entrar</button>
       </form>
     </dialog>
 
