@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Supabase config: replace values or inject via Vercel env during build -->
+    <meta name="supabase-url" content="https://haevajmpzjtaromjmzfe.supabase.co">
+    <meta name="supabase-anon-key" content="sb_publishable_-cVmWUBFn3MqodMCE6taKw_K2nD7VVu">
     <title>Yoga Team Studio | Prototipo fase 1</title>
     <link rel="stylesheet" href="styles.css">
   </head>
@@ -276,6 +279,9 @@
     </dialog>
 
     <div class="toast" id="toast" hidden></div>
+    <!-- Supabase UMD (optional). The client file will try multiple loaders. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
+    <script src="/supabaseClient.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
