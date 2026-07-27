@@ -10,7 +10,7 @@ Usage (static, no bundler):
   3) Include this script after the meta tags:
      <script src="/supabaseClient.js"></script>
   4) Use the client via the global `getSupabase()` promise:
-     getSupabase().then(supabase => { /* use supabase */ });
+     getSupabase().then(supabase => console.log(supabase));
 
 Usage (bundler / ESM):
   import { getSupabase } from './supabaseClient.js';
