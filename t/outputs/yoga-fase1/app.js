@@ -1,4 +1,5 @@
 const storageKey = "luma-yoga-prototype";
+const checkoutStorageKey = "reset-checkout-return";
 
 const seedItems = [
   {
@@ -111,8 +112,9 @@ const serviceDetails = {
 };
 
 const defaultSiteContent = {
-  heroTitle: "Yoga Team Studio",
-  heroDescription: "Una web de yoga con zona privada, clases en video, audios de meditacion y contenido premium gestionado desde un panel sencillo.",
+  brandingVersion: 1,
+  heroTitle: "Reset de Conciencia",
+  heroDescription: "Un espacio para volver al cuerpo, respirar con calma y practicar a tu ritmo mediante clases de yoga, meditaciones y audios guiados.",
   teacherPhotoCustom: false,
   teacherSlides: [
     {
@@ -198,6 +200,7 @@ let authMode = "login";
 const mediaUrls = new Map();
 const mediaDatabaseName = "luma-yoga-media";
 const mediaStoreName = "uploads";
+const supabaseMediaBucket = "lesson-media";
 const siteTeacherPhotoStorageId = "site-teacher-photo";
 let pendingPanel = null;
 let editingItemId = null;
@@ -221,10 +224,12 @@ function loadState() {
 function normalizeSiteContent(savedContent = {}) {
   const savedSlides = Array.isArray(savedContent.teacherSlides) ? savedContent.teacherSlides : [];
   const savedServices = savedContent.services || {};
+  const hasCurrentBranding = Number(savedContent.brandingVersion || 0) >= defaultSiteContent.brandingVersion;
 
   return {
-    heroTitle: savedContent.heroTitle ?? defaultSiteContent.heroTitle,
-    heroDescription: savedContent.heroDescription ?? defaultSiteContent.heroDescription,
+    brandingVersion: defaultSiteContent.brandingVersion,
+    heroTitle: hasCurrentBranding ? savedContent.heroTitle ?? defaultSiteContent.heroTitle : defaultSiteContent.heroTitle,
+    heroDescription: hasCurrentBranding ? savedContent.heroDescription ?? defaultSiteContent.heroDescription : defaultSiteContent.heroDescription,
     teacherPhotoCustom: Boolean(savedContent.teacherPhotoCustom),
     teacherSlides: defaultSiteContent.teacherSlides.map((slide, index) => ({
       ...slide,
@@ -278,9 +283,424 @@ function currentUser() {
   return state.users.find((user) => user.email === state.session.email) || null;
 }
 
+function rememberCheckout(user, purchaseType, item) {
+  sessionStorage.setItem(checkoutStorageKey, JSON.stringify({
+    email: user.email,
+    purchaseType,
+    lessonId: item?.databaseId || null
+  }));
+}
+
+function pendingCheckout() {
+  try {
+    return JSON.parse(sessionStorage.getItem(checkoutStorageKey) || "null");
+  } catch (error) {
+    console.error("Could not read pending checkout:", error);
+    return null;
+  }
+}
+
+function clearPendingCheckout() {
+  sessionStorage.removeItem(checkoutStorageKey);
+}
+
+async function startStripeCheckout(purchaseType, item, button) {
+  const user = currentUser();
+  if (!user) {
+    openAuthDialog("login");
+    notify(purchaseType === "lesson"
+      ? "Inicia sesion para comprar este contenido."
+      : "Inicia sesion para activar la suscripcion.");
+    return;
+  }
+
+  if (purchaseType === "lesson" && !item?.databaseId) {
+    notify("Esta clase de demostracion no esta guardada en Supabase y no se puede cobrar.");
+    return;
+  }
+
+  if (window.location.protocol === "file:") {
+    notify("La pasarela se puede probar cuando la web este publicada en Vercel.");
+    return;
+  }
+
+  const originalText = button.textContent;
+  let redirecting = false;
+  button.disabled = true;
+  button.textContent = "Abriendo pago...";
+
+  try {
+    rememberCheckout(user, purchaseType, item);
+    const response = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        purchaseType,
+        lessonId: item?.databaseId || null,
+        userId: user.id || null,
+        email: user.email
+      })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.url) {
+      throw new Error(result.message || "No se pudo abrir la pagina de pago.");
+    }
+
+    redirecting = true;
+    window.location.assign(result.url);
+  } catch (error) {
+    clearPendingCheckout();
+    console.error("Could not start Stripe Checkout:", error);
+    notify(error.message || "No se pudo iniciar el pago.");
+  } finally {
+    if (!redirecting) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function processCheckoutReturn() {
+  const query = new URLSearchParams(window.location.search);
+  const checkoutResult = query.get("checkout");
+  if (!checkoutResult) return;
+
+  const pending = pendingCheckout();
+  const pendingUser = pending?.email
+    ? state.users.find((user) => user.email === pending.email)
+    : null;
+
+  if (checkoutResult === "cancel") {
+    if (pendingUser) state.session = { email: pendingUser.email };
+    clearPendingCheckout();
+    saveState();
+    history.replaceState(null, "", pendingUser ? "#dashboard" : "#contenido");
+    updateHeader();
+    renderPublicContent();
+    routeFromHash();
+    notify("Pago cancelado. No se ha realizado ningun cargo.");
+    return;
+  }
+
+  const sessionId = query.get("session_id");
+  if (checkoutResult !== "success" || !sessionId) return;
+
+  notify("Confirmando el pago con Stripe...");
+  try {
+    const response = await fetch(`/api/checkout-status?session_id=${encodeURIComponent(sessionId)}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "No se pudo confirmar el pago.");
+    if (!result.accessGranted) {
+      throw new Error("Stripe todavia no ha confirmado el pago. Actualiza la pagina en unos segundos.");
+    }
+
+    const email = String(result.email || "").toLowerCase();
+    if (pending?.email && email !== pending.email) {
+      throw new Error("El pago no coincide con la cuenta que lo inicio.");
+    }
+
+    const user = state.users.find((entry) => entry.email === email);
+    if (user) {
+      state.session = { email: user.email };
+      if (result.purchaseType === "subscription") {
+        user.premium = true;
+      } else if (result.purchaseType === "lesson" && result.lessonId) {
+        user.purchases = user.purchases || [];
+        const itemId = databaseItemId(result.lessonId);
+        if (!user.purchases.includes(itemId)) user.purchases.push(itemId);
+      }
+    }
+
+    clearPendingCheckout();
+    saveState();
+    history.replaceState(null, "", user ? "#dashboard" : "#inicio");
+    updateHeader();
+    if (user) renderDashboard();
+    renderPublicContent();
+    routeFromHash();
+    notify(result.purchaseType === "subscription"
+      ? "Suscripcion activada. Ya tienes acceso al contenido premium."
+      : "Pago confirmado. El contenido ya esta disponible en tu biblioteca.");
+  } catch (error) {
+    console.error("Could not finish Stripe Checkout:", error);
+    notify(error.message || "No se pudo confirmar el pago.");
+  }
+}
+
 async function getDatabase() {
   if (typeof window.getSupabase !== "function") return null;
   return window.getSupabase();
+}
+
+function databaseItemId(databaseId) {
+  return `db-${databaseId}`;
+}
+
+function slugify(value) {
+  return String(value || "contenido")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "contenido";
+}
+
+function safeStorageFileName(fileName) {
+  const normalizedName = String(fileName || "archivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalizedName || "archivo";
+}
+
+function itemFromDatabase(row) {
+  const mediaRecords = Array.isArray(row.media) ? row.media : [];
+  const media = [...mediaRecords]
+    .sort((first, second) => Number(first.position || 0) - Number(second.position || 0))
+    .find((entry) => entry.type === "video" || entry.type === "audio");
+
+  return {
+    id: databaseItemId(row.id),
+    databaseId: row.id,
+    mediaId: media?.id || null,
+    storagePath: media?.storage_path || null,
+    title: row.title,
+    description: row.description || "",
+    type: media?.type || "video",
+    category: row.category || "Yoga",
+    level: row.level || "Principiante",
+    duration: row.duration || formatDuration(Number(row.duration_seconds || media?.duration_seconds || 0)) || "Sin duracion",
+    durationSeconds: Number(row.duration_seconds || media?.duration_seconds || 0),
+    price: Number(row.price_individual || 0),
+    premium: Boolean(row.is_premium),
+    previewEnabled: Boolean(row.preview_enabled),
+    previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
+    fileName: media?.file_name || "Sin archivo",
+    mediaUrl: media?.url || "",
+    hasStoredMedia: Boolean(media?.url)
+  };
+}
+
+async function syncContentFromDatabase() {
+  try {
+    const db = await getDatabase();
+    if (!db) return;
+
+    const { data, error } = await db
+      .from("lessons")
+      .select(`
+        id,
+        title,
+        description,
+        is_premium,
+        price_individual,
+        preview_enabled,
+        preview_duration_seconds,
+        level,
+        duration,
+        duration_seconds,
+        category,
+        is_published,
+        created_at,
+        media (
+          id,
+          type,
+          url,
+          storage_bucket,
+          storage_path,
+          file_name,
+          mime_type,
+          file_size_bytes,
+          duration_seconds,
+          position
+        )
+      `)
+      .eq("is_published", true)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const databaseItems = (data || []).map(itemFromDatabase);
+    const localItems = state.items.filter((item) => !item.databaseId);
+    state.items = [...databaseItems, ...localItems];
+    saveState();
+    renderPublicContent();
+    if (state.session && window.location.hash === "#dashboard") renderDashboard();
+  } catch (error) {
+    console.error("Could not sync content from Supabase:", error);
+    notify(`No se pudo cargar el contenido de Supabase: ${error.message || "revisa permisos"}`);
+  }
+}
+
+async function saveContentToDatabase(item, file) {
+  const db = await getDatabase();
+  if (!db) throw new Error("No se pudo iniciar la conexion con Supabase");
+
+  const lessonPayload = {
+    title: item.title,
+    description: item.description || null,
+    is_premium: Boolean(item.premium),
+    price_individual: Number(item.price || 0),
+    preview_enabled: Boolean(item.previewEnabled),
+    preview_duration_seconds: previewLimitInSeconds(item.previewDuration),
+    level: item.level || null,
+    duration: item.duration || null,
+    duration_seconds: previewLimitInSeconds(item.duration) || null,
+    category: item.category || null,
+    is_published: true,
+    published_at: new Date().toISOString()
+  };
+
+  let lesson;
+  let createdLesson = false;
+
+  if (item.databaseId) {
+    const { data, error } = await db
+      .from("lessons")
+      .update(lessonPayload)
+      .eq("id", item.databaseId)
+      .select()
+      .single();
+    if (error) throw error;
+    lesson = data;
+  } else {
+    const currentTeacher = currentUser();
+    const insertPayload = {
+      ...lessonPayload,
+      slug: `${slugify(item.title)}-${Date.now().toString(36)}`
+    };
+    if (currentTeacher?.id) insertPayload.created_by = currentTeacher.id;
+
+    const { data, error } = await db
+      .from("lessons")
+      .insert(insertPayload)
+      .select()
+      .single();
+    if (error) throw error;
+    lesson = data;
+    createdLesson = true;
+  }
+
+  let mediaRecord = item.mediaId ? {
+    id: item.mediaId,
+    url: item.mediaUrl,
+    storage_path: item.storagePath,
+    file_name: item.fileName,
+    type: item.type
+  } : null;
+  let uploadedPath = null;
+
+  try {
+    if (file) {
+      uploadedPath = `${lesson.id}/${Date.now()}-${safeStorageFileName(file.name)}`;
+      const { error: uploadError } = await db.storage
+        .from(supabaseMediaBucket)
+        .upload(uploadedPath, file, {
+          cacheControl: "3600",
+          contentType: file.type || undefined,
+          upsert: false
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = db.storage
+        .from(supabaseMediaBucket)
+        .getPublicUrl(uploadedPath);
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
+
+      const mediaPayload = {
+        lesson_id: lesson.id,
+        title: item.title,
+        type: item.type,
+        url: publicUrl,
+        storage_bucket: supabaseMediaBucket,
+        storage_path: uploadedPath,
+        file_name: file.name,
+        mime_type: file.type || null,
+        file_size_bytes: file.size,
+        duration_seconds: previewLimitInSeconds(item.duration) || null,
+        position: 0,
+        metadata: {
+          category: item.category,
+          level: item.level,
+          premium: Boolean(item.premium)
+        }
+      };
+
+      if (item.mediaId) {
+        const { data, error } = await db
+          .from("media")
+          .update(mediaPayload)
+          .eq("id", item.mediaId)
+          .select()
+          .single();
+        if (error) throw error;
+        mediaRecord = data;
+      } else {
+        const { data, error } = await db
+          .from("media")
+          .insert(mediaPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        mediaRecord = data;
+      }
+
+      if (item.storagePath && item.storagePath !== uploadedPath) {
+        const { error: removeError } = await db.storage
+          .from(supabaseMediaBucket)
+          .remove([item.storagePath]);
+        if (removeError) console.error("Could not remove previous Supabase media:", removeError);
+      }
+    }
+  } catch (error) {
+    if (uploadedPath) {
+      try {
+        await db.storage.from(supabaseMediaBucket).remove([uploadedPath]);
+      } catch (cleanupError) {
+        console.error("Could not clean failed Supabase upload:", cleanupError);
+      }
+    }
+    if (createdLesson) {
+      try {
+        await db.from("lessons").delete().eq("id", lesson.id);
+      } catch (cleanupError) {
+        console.error("Could not clean failed Supabase lesson:", cleanupError);
+      }
+    }
+    throw error;
+  }
+
+  return {
+    ...item,
+    id: databaseItemId(lesson.id),
+    databaseId: lesson.id,
+    mediaId: mediaRecord?.id || null,
+    storagePath: mediaRecord?.storage_path || null,
+    mediaUrl: mediaRecord?.url || "",
+    fileName: mediaRecord?.file_name || item.fileName || "Sin archivo",
+    hasStoredMedia: Boolean(mediaRecord?.url)
+  };
+}
+
+async function deleteContentFromDatabase(item) {
+  if (!item.databaseId) return;
+  const db = await getDatabase();
+  if (!db) throw new Error("No se pudo iniciar la conexion con Supabase");
+
+  const { error } = await db
+    .from("lessons")
+    .delete()
+    .eq("id", item.databaseId);
+  if (error) throw error;
+
+  if (item.storagePath) {
+    const { error: storageError } = await db.storage
+      .from(supabaseMediaBucket)
+      .remove([item.storagePath]);
+    if (storageError) console.error("Could not remove deleted lesson media:", storageError);
+  }
 }
 
 function userFromDatabase(row) {
@@ -497,12 +917,13 @@ function contentCard(item) {
   const user = currentUser();
   const locked = !canOpen(item);
   const hasPreview = item.previewEnabled;
-  const canBuySingle = locked && item.premium && item.price > 0;
+  const hasIndividualPrice = item.premium && item.price > 0;
+  const canBuySingle = locked && hasIndividualPrice;
   const typeLabel = item.type === "video" ? "Video" : "Audio";
   const symbol = item.type === "video" ? "play" : "audio";
   const boughtSingle = Boolean(user?.purchases?.includes(item.id));
   const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
-  const mediaUrl = mediaUrls.get(item.id);
+  const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
   const media = mediaUrl && !locked
     ? item.type === "video"
       ? `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></video>`
@@ -522,12 +943,15 @@ function contentCard(item) {
       </div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml(item.description)}</p>
-      ${locked ? `<p class="preview-note">Puedes comprar este contenido suelto o activar la suscripcion completa.</p>` : ""}
+      ${locked ? `<p class="preview-note">${hasIndividualPrice
+        ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
+        : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(item.fileName || "archivo-demo")}</p>
       <div class="card-actions">
         ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
         ${hasPreview ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
         ${canBuySingle ? `<button class="primary-button" type="button" data-buy-item="${item.id}">Comprar ${escapeHtml(formatPrice(item.price))}</button>` : ""}
+        ${locked && item.premium && !hasIndividualPrice ? `<button class="secondary-button" type="button" data-price-pending>Compra individual: precio pendiente</button>` : ""}
         ${locked ? `<button class="secondary-button" type="button" data-subscribe>Suscribirme</button>` : ""}
       </div>
     </article>
@@ -571,7 +995,7 @@ function renderAdminRows() {
       <td>${escapeHtml(item.title)}</td>
       <td>${item.type === "video" ? "Video" : "Audio"}</td>
       <td>${item.premium ? "Premium" : "Gratis"}</td>
-      <td>${item.premium && item.price > 0 ? escapeHtml(formatPrice(item.price)) : "-"}</td>
+      <td>${item.premium ? item.price > 0 ? escapeHtml(formatPrice(item.price)) : "Falta precio" : "-"}</td>
       <td>${item.previewEnabled ? escapeHtml(item.previewDuration || "Si") : "No"}</td>
       <td>
         <div class="table-actions">
@@ -676,9 +1100,27 @@ async function login(email, password) {
     return;
   }
 
+  if (authMode === "register" && !fullName) {
+    notify("Introduce tu nombre para crear la cuenta.");
+    openAuthDialog("register");
+    document.querySelector("#emailInput").value = normalizedEmail;
+    return;
+  }
+
+  const savedLocalUser = state.users.find((entry) => entry.email === normalizedEmail);
+  if (authMode === "login" && savedLocalUser) {
+    if (savedLocalUser.passwordHash && savedLocalUser.passwordHash !== passwordHash) {
+      notify("Contraseña incorrecta.");
+      openAuthDialog("login");
+      document.querySelector("#emailInput").value = normalizedEmail;
+      return;
+    }
+    user = savedLocalUser;
+  }
+
   try {
     const db = await getDatabase();
-    if (db) {
+    if (db && !user) {
       const { data: existingUser, error: findError } = await db
         .from("users")
         .select("id,email,full_name,password_hash,role,is_premium")
@@ -717,29 +1159,33 @@ async function login(email, password) {
         }
       } else {
         if (!existingUser) {
-          notify("No existe una cuenta con ese email. Registrate primero.");
-          openAuthDialog("register");
-          document.querySelector("#emailInput").value = normalizedEmail;
-          return;
+          const demoUser = state.users.find((entry) => entry.email === normalizedEmail);
+          if (demoUser?.passwordHash === passwordHash) {
+            user = demoUser;
+          } else {
+            notify("No existe una cuenta con ese email. Registrate primero.");
+            openAuthDialog("register");
+            document.querySelector("#emailInput").value = normalizedEmail;
+            return;
+          }
+        } else {
+          user = userFromDatabase(existingUser);
+          if (user.passwordHash && user.passwordHash !== passwordHash) {
+            notify("Contraseña incorrecta.");
+            openAuthDialog("login");
+            document.querySelector("#emailInput").value = normalizedEmail;
+            return;
+          }
+          await db
+            .from("users")
+            .update({ last_login_at: new Date().toISOString() })
+            .eq("email", normalizedEmail);
         }
-
-        user = userFromDatabase(existingUser);
-        if (user.passwordHash && user.passwordHash !== passwordHash) {
-          notify("Contraseña incorrecta.");
-          openAuthDialog("login");
-          document.querySelector("#emailInput").value = normalizedEmail;
-          return;
-        }
-        await db
-          .from("users")
-          .update({ last_login_at: new Date().toISOString() })
-          .eq("email", normalizedEmail);
       }
     }
   } catch (error) {
     console.error("Supabase user flow failed:", error);
-    notify(`Supabase no dejo completar la accion: ${error.message || "revisa permisos/RLS"}`);
-    return;
+    notify("No se pudo conectar con Supabase. Continuamos en modo de prueba local.");
   }
 
   if (!user) {
@@ -941,7 +1387,7 @@ function previewLimitInSeconds(value) {
 }
 
 function openMediaViewer(item, preview = false) {
-  const mediaUrl = mediaUrls.get(item.id);
+  const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
   if (!mediaUrl) {
     notify("El archivo no esta disponible. La profesora debe volver a subir este contenido.");
     return;
@@ -1040,7 +1486,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-document.body.addEventListener("click", (event) => {
+document.body.addEventListener("click", async (event) => {
   const authButton = event.target.closest("[data-auth-mode]");
   if (authButton) {
     pendingPanel = null;
@@ -1084,38 +1530,23 @@ document.body.addEventListener("click", (event) => {
     if (item) openMediaViewer(item, true);
   }
 
+  const pricePendingButton = event.target.closest("[data-price-pending]");
+  if (pricePendingButton) {
+    notify("La profesora todavia no ha asignado un precio individual a este contenido.");
+    return;
+  }
+
   const buyButton = event.target.closest("[data-buy-item]");
   if (buyButton) {
     const item = state.items.find((entry) => entry.id === buyButton.dataset.buyItem);
-    if (!state.session) {
-      openAuthDialog("login");
-      notify("Inicia sesion para comprar este contenido.");
-      return;
-    }
-    const user = currentUser();
-    user.purchases = user.purchases || [];
-    if (!user.purchases.includes(item.id)) {
-      user.purchases.push(item.id);
-    }
-    saveState();
-    renderDashboard();
-    renderPublicContent();
-    notify(`Compra simulada: ${item.title} queda desbloqueado para tu cuenta.`);
+    if (item) await startStripeCheckout("lesson", item, buyButton);
+    return;
   }
 
   const subscribeButton = event.target.closest("[data-subscribe]");
   if (subscribeButton) {
-    if (!state.session) {
-      openAuthDialog("login");
-      notify("Inicia sesion para activar la suscripcion.");
-      return;
-    }
-    const user = currentUser();
-    user.premium = true;
-    saveState();
-    renderDashboard();
-    renderPublicContent();
-    notify("Suscripcion simulada activada. Ya puedes ver todo el contenido premium.");
+    await startStripeCheckout("subscription", null, subscribeButton);
+    return;
   }
 
   const editButton = event.target.closest("[data-edit-item]");
@@ -1130,15 +1561,28 @@ document.body.addEventListener("click", (event) => {
     const itemId = deleteButton.dataset.deleteItem;
     const index = state.items.findIndex((entry) => entry.id === itemId);
     if (index < 0) return;
-    state.items.splice(index, 1);
-    const mediaUrl = mediaUrls.get(itemId);
-    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
-    mediaUrls.delete(itemId);
-    deleteStoredMedia(itemId).catch((error) => console.error("Could not delete media file:", error));
-    if (editingItemId === itemId) resetContentEditor();
-    saveState();
-    renderDashboard();
-    renderPublicContent();
+    const item = state.items[index];
+    deleteButton.disabled = true;
+    deleteButton.textContent = "Eliminando...";
+
+    try {
+      await deleteContentFromDatabase(item);
+      state.items.splice(index, 1);
+      const mediaUrl = mediaUrls.get(itemId);
+      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+      mediaUrls.delete(itemId);
+      deleteStoredMedia(itemId).catch((error) => console.error("Could not delete local media file:", error));
+      if (editingItemId === itemId) resetContentEditor();
+      saveState();
+      renderDashboard();
+      renderPublicContent();
+      notify(item.databaseId ? "Contenido eliminado de Supabase." : "Contenido eliminado de la demo.");
+    } catch (error) {
+      console.error("Could not delete content from Supabase:", error);
+      deleteButton.disabled = false;
+      deleteButton.textContent = "Eliminar";
+      notify(`No se pudo eliminar de Supabase: ${error.message || "revisa permisos"}`);
+    }
   }
 
   const toggleUser = event.target.closest("[data-toggle-user]");
@@ -1206,8 +1650,15 @@ authForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const email = document.querySelector("#emailInput").value.trim() || (authMode === "register" ? "nueva@demo.com" : "alumna@demo.com");
   const password = document.querySelector("#passwordInput").value;
+  const submitButton = document.querySelector("#authSubmitButton");
+  submitButton.disabled = true;
+  submitButton.textContent = authMode === "register" ? "Creando cuenta..." : "Comprobando...";
+  notify(authMode === "register" ? "Creando tu cuenta..." : "Comprobando tus datos...");
   authDialog.close();
-  login(email, password);
+  login(email, password).finally(() => {
+    submitButton.disabled = false;
+    submitButton.textContent = authMode === "register" ? "Crear cuenta" : "Entrar";
+  });
 });
 
 document.querySelector("#itemFile").addEventListener("change", async (event) => {
@@ -1283,6 +1734,7 @@ siteContentForm.addEventListener("submit", async (event) => {
 
   const readValue = (selector) => document.querySelector(selector).value.trim();
   const nextSiteContent = normalizeSiteContent({
+    brandingVersion: defaultSiteContent.brandingVersion,
     heroTitle: readValue("#siteHeroTitle"),
     heroDescription: readValue("#siteHeroDescription"),
     teacherPhotoCustom: photoFile ? true : state.siteContent.teacherPhotoCustom,
@@ -1387,6 +1839,9 @@ contentForm.addEventListener("submit", async (event) => {
   const file = fileInput.files[0];
   const titleInput = document.querySelector("#itemTitle");
   const rawTitle = titleInput.value.trim();
+  const premiumInput = document.querySelector("#itemPremium");
+  const priceInput = document.querySelector("#itemPrice");
+  const price = Number(priceInput.value || 0);
 
   if (!rawTitle) {
     notify("El titulo es obligatorio para guardar contenido.");
@@ -1395,10 +1850,17 @@ contentForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  if (premiumInput.checked && price <= 0) {
+    notify("Añade un precio individual mayor que 0 para publicar contenido premium.");
+    priceInput.focus();
+    priceInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
   const existingItem = editingItemId
     ? state.items.find((entry) => entry.id === editingItemId)
     : null;
-  const item = {
+  let item = {
     ...existingItem,
     id: existingItem?.id || `item-${Date.now()}`,
     title: rawTitle,
@@ -1407,8 +1869,8 @@ contentForm.addEventListener("submit", async (event) => {
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
     duration: document.querySelector("#itemDuration").value || "Sin duracion",
-    price: Number(document.querySelector("#itemPrice").value || 0),
-    premium: document.querySelector("#itemPremium").checked,
+    price,
+    premium: premiumInput.checked,
     previewEnabled: document.querySelector("#itemPreview").checked,
     previewDuration: document.querySelector("#itemPreviewDuration").value || "2 min",
     fileName: file?.name || existingItem?.fileName || "archivo-local-demo"
@@ -1419,43 +1881,51 @@ contentForm.addEventListener("submit", async (event) => {
   contentSubmitButton.textContent = "Guardando...";
 
   try {
-    if (file) {
-      await storeMediaFile(item.id, file);
-      const previousUrl = mediaUrls.get(item.id);
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-      mediaUrls.set(item.id, URL.createObjectURL(file));
-      item.hasStoredMedia = true;
+    let fileForUpload = file;
+    if (!fileForUpload && existingItem?.hasStoredMedia && !existingItem.databaseId) {
+      const storedRecord = await getStoredMedia(existingItem.id);
+      if (storedRecord?.blob) {
+        fileForUpload = new File(
+          [storedRecord.blob],
+          storedRecord.name || existingItem.fileName || "archivo",
+          { type: storedRecord.type || storedRecord.blob.type }
+        );
+      }
     }
 
+    const previousItemId = item.id;
+    item = await saveContentToDatabase(item, fileForUpload);
+
     if (wasEditing) {
-      const itemIndex = state.items.findIndex((entry) => entry.id === item.id);
+      const itemIndex = state.items.findIndex((entry) => entry.id === previousItemId);
       state.items[itemIndex] = item;
     } else {
       state.items.unshift(item);
     }
+
+    if (previousItemId !== item.id) {
+      const previousUrl = mediaUrls.get(previousItemId);
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      mediaUrls.delete(previousItemId);
+      deleteStoredMedia(previousItemId).catch((error) => console.error("Could not remove migrated local media:", error));
+    }
+
     saveState();
     resetContentEditor();
     renderDashboard();
     renderPublicContent();
-    notify(wasEditing ? "Contenido actualizado." : file ? "Contenido y archivo guardados en la demo." : "Contenido guardado sin archivo multimedia.");
+    notify(wasEditing ? "Contenido actualizado en Supabase." : fileForUpload ? "Contenido y archivo guardados en Supabase." : "Contenido guardado en Supabase sin archivo multimedia.");
   } catch (error) {
-    console.error("Could not store media file:", error);
-    notify(`No se pudo guardar el archivo: ${error.message || "revisa el espacio del navegador"}`);
+    console.error("Could not save content in Supabase:", error);
+    notify(`No se pudo guardar en Supabase: ${error.message || "revisa la consulta y los permisos"}`);
   } finally {
     contentSubmitButton.disabled = false;
-    contentSubmitButton.textContent = editingItemId ? "Guardar cambios" : "Guardar contenido";
+    contentSubmitButton.textContent = wasEditing && editingItemId ? "Guardar cambios" : "Guardar contenido";
   }
 });
 
 typeFilter.addEventListener("change", renderPublicContent);
 categoryFilter.addEventListener("change", renderPublicContent);
-
-document.querySelector("#togglePremiumSelf").addEventListener("click", () => {
-  const user = currentUser();
-  user.premium = !user.premium;
-  saveState();
-  renderDashboard();
-});
 
 window.addEventListener("hashchange", routeFromHash);
 
@@ -1464,4 +1934,5 @@ renderSiteContent();
 showTeacherSlide(0);
 renderPublicContent();
 routeFromHash();
-restoreStoredMedia();
+processCheckoutReturn();
+restoreStoredMedia().then(syncContentFromDatabase);

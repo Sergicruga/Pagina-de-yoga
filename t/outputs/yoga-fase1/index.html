@@ -6,14 +6,14 @@
     <!-- Supabase config: replace values or inject via Vercel env during build -->
     <meta name="supabase-url" content="https://haevajmpzjtaromjmzfe.supabase.co">
     <meta name="supabase-anon-key" content="sb_publishable_-cVmWUBFn3MqodMCE6taKw_K2nD7VVu">
-    <title>Yoga Team Studio | Prototipo fase 1</title>
+    <title>Reset de Conciencia | Yoga y bienestar</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#inicio" data-route="inicio">
-        <span class="brand-mark">LY</span>
-        <span>Yoga Team</span>
+      <a class="brand" href="#inicio" data-route="inicio" aria-label="Reset de Conciencia, inicio">
+        <img class="brand-logo" src="assets/reset-de-conciencia-logo.jpeg" alt="">
+        <span class="brand-name">Reset de Conciencia</span>
       </a>
       <nav class="main-nav" aria-label="Navegacion principal">
         <a href="#inicio" data-route="inicio">Inicio</a>
@@ -32,9 +32,9 @@
         <div class="hero-view">
           <div class="hero-media" role="img" aria-label="Estudio de yoga sereno con luz natural"></div>
           <div class="hero-content">
-            <p class="eyebrow">Prototipo fase 1</p>
-            <h1 id="publicHeroTitle">Yoga Team Studio</h1>
-            <p id="publicHeroDescription">Una web de yoga con zona privada, clases en video, audios de meditacion y contenido premium gestionado desde un panel sencillo.</p>
+            <p class="eyebrow">Yoga, respiracion y calma</p>
+            <h1 id="publicHeroTitle">Reset de Conciencia</h1>
+            <p id="publicHeroDescription">Un espacio para volver al cuerpo, respirar con calma y practicar a tu ritmo mediante clases de yoga, meditaciones y audios guiados.</p>
             <div class="hero-actions">
               <button class="primary-button" type="button" data-auth-mode="register">Crear cuenta gratis</button>
               <button class="secondary-button" type="button" data-auth-mode="login">Iniciar sesion</button>
@@ -83,26 +83,26 @@
         </section>
         <div class="home-preview">
           <div class="section-heading">
-            <p class="eyebrow">Primera version</p>
-            <h2>Todo listo para ensenar la idea y decidir estilo</h2>
+            <p class="eyebrow">Tu espacio de bienestar</p>
+            <h2>Practica, respira y vuelve a ti</h2>
           </div>
           <div class="service-grid home-service-grid">
             <button class="service-card service-link" type="button" data-route="contenido">
               <span>01</span>
-              <h3>Web publica</h3>
-              <p>Inicio, clases, contenido gratuito y contacto para presentar el proyecto.</p>
-              <span class="service-card-action">Ver contenido publico</span>
+              <h3>Biblioteca online</h3>
+              <p>Descubre clases, meditaciones y contenido gratuito antes de elegir tu practica.</p>
+              <span class="service-card-action">Ver contenido</span>
             </button>
             <button class="service-card service-link" type="button" data-dashboard-panel="library">
               <span>02</span>
-              <h3>Zona privada</h3>
-              <p>Acceso para alumnas con biblioteca de videos y audios separados por tipo y categoria.</p>
+              <h3>Tu espacio privado</h3>
+              <p>Guarda tu acceso a videos y audios organizados por tipo, nivel y categoria.</p>
               <span class="service-card-action">Abrir biblioteca</span>
             </button>
             <button class="service-card service-link teacher-home-only" type="button" data-dashboard-panel="admin" hidden>
               <span>03</span>
               <h3>Gestionar contenido</h3>
-              <p>Subida demo de contenido, premium manual y gestion de usuarios para validar el flujo.</p>
+              <p>Sube clases y audios, decide su acceso y administra la biblioteca desde un solo lugar.</p>
               <span class="service-card-action">Abrir panel</span>
             </button>
           </div>
@@ -272,7 +272,6 @@
                 <p id="profileText"></p>
                 <div class="profile-actions">
                   <button class="primary-button" type="submit">Guardar perfil</button>
-                  <button class="secondary-button" type="button" id="togglePremiumSelf">Simular premium</button>
                 </div>
               </form>
             </div>
@@ -306,7 +305,7 @@
                   </select>
                 </label>
                 <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
-                <label>Precio individual<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
+                <label>Precio individual (obligatorio si es premium)<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
               </div>
               <label>Archivo de prueba<input id="itemFile" type="file" accept="audio/*,video/*"></label>
               <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>

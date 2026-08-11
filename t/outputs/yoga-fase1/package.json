@@ -1,0 +1,13 @@
+{
+  "name": "reset-de-conciencia-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.111.0",
+    "stripe": "22.1.1"
+  }
+}
