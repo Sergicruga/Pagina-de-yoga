@@ -314,6 +314,11 @@ async function startStripeCheckout(purchaseType, item, button) {
     return;
   }
 
+  if (!user.id) {
+    notify("La cuenta demo solo existe en este navegador. Cierra sesion y registra una cuenta para probar el pago.");
+    return;
+  }
+
   if (purchaseType === "lesson" && !item?.databaseId) {
     notify("Esta clase de demostracion no esta guardada en Supabase y no se puede cobrar.");
     return;
