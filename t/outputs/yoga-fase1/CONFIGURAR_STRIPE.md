@@ -23,6 +23,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 SITE_URL=https://tu-dominio.vercel.app
 ```
 
+Para la URL también puede reutilizarse `NEXT_PUBLIC_SUPABASE_URL`; el servidor acepta ambos nombres.
 `SUPABASE_SERVICE_ROLE_KEY` es distinta de la clave publica `anon`. Solo debe estar en Vercel.
 
 ## 3. Webhook

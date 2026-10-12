@@ -4,14 +4,16 @@ import { createClient } from "@supabase/supabase-js";
 let stripeClient;
 let databaseClient;
 
-function requiredEnvironmentValue(name) {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    const error = new Error(`Falta la variable privada ${name} en Vercel.`);
-    error.name = "ConfigurationError";
-    throw error;
+function requiredEnvironmentValue(name, aliases = []) {
+  const variableNames = [name, ...aliases];
+  for (const variableName of variableNames) {
+    const value = process.env[variableName]?.trim();
+    if (value) return value;
   }
-  return value;
+
+  const error = new Error(`Falta la variable de entorno ${variableNames.join(" o ")} en Vercel.`);
+  error.name = "ConfigurationError";
+  throw error;
 }
 
 export function getStripe() {
@@ -24,7 +26,7 @@ export function getStripe() {
 export function getServerDatabase() {
   if (!databaseClient) {
     databaseClient = createClient(
-      requiredEnvironmentValue("SUPABASE_URL"),
+      requiredEnvironmentValue("SUPABASE_URL", ["NEXT_PUBLIC_SUPABASE_URL"]),
       requiredEnvironmentValue("SUPABASE_SERVICE_ROLE_KEY"),
       {
         auth: {
