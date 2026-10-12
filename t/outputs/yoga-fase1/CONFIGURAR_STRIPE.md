@@ -18,13 +18,14 @@ En `Project > Settings > Environment Variables`, anade:
 ```text
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PREMIUM_PRICE_ID=price_...
-SUPABASE_URL=https://...supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
+NEXT_PUBLIC_SUPABASE_URL=https://...supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 SITE_URL=https://tu-dominio.vercel.app
 ```
 
-Para la URL también puede reutilizarse `NEXT_PUBLIC_SUPABASE_URL`; el servidor acepta ambos nombres.
-`SUPABASE_SERVICE_ROLE_KEY` es distinta de la clave publica `anon`. Solo debe estar en Vercel.
+También se aceptan los nombres antiguos `NEXT_PUBLIC_SUPABASE_ANON_KEY` y
+`SUPABASE_SERVICE_ROLE_KEY`. La clave secreta de Supabase solo debe estar en Vercel.
 
 ## 3. Webhook
 
