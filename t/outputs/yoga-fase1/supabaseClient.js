@@ -34,13 +34,13 @@ This file attempts multiple approaches to create a client:
     var url = cfg.url || readMeta('supabase-url') || (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL)) || '';
     var anonKey = cfg.anonKey || readMeta('supabase-anon-key') || (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)) || '';
 
-    if ((!url || !anonKey) && typeof fetch === 'function' && typeof location !== 'undefined' && location.protocol !== 'file:') {
+    if (typeof fetch === 'function' && typeof location !== 'undefined' && location.protocol !== 'file:') {
       try {
         var response = await fetch('/api/public-config', { cache: 'no-store' });
         if (response.ok) {
           var remoteConfig = await response.json();
-          url = url || remoteConfig.url || '';
-          anonKey = anonKey || remoteConfig.publishableKey || '';
+          url = cfg.url || remoteConfig.url || url;
+          anonKey = cfg.anonKey || remoteConfig.publishableKey || anonKey;
         }
       } catch (error) {
         console.error('Could not load public Supabase config:', error);
