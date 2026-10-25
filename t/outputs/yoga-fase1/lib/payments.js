@@ -27,7 +27,7 @@ export function getServerDatabase() {
   if (!databaseClient) {
     databaseClient = createClient(
       requiredEnvironmentValue("SUPABASE_URL", ["NEXT_PUBLIC_SUPABASE_URL"]),
-      requiredEnvironmentValue("SUPABASE_SERVICE_ROLE_KEY"),
+      requiredEnvironmentValue("SUPABASE_SECRET_KEY", ["SUPABASE_SERVICE_ROLE_KEY"]),
       {
         auth: {
           autoRefreshToken: false,

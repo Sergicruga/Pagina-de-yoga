@@ -29,16 +29,30 @@ This file attempts multiple approaches to create a client:
     return m ? m.content : '';
   }
 
-  function getConfig() {
+  async function getConfig() {
     var cfg = (global && global.__SUPABASE_CONFIG) || {};
     var url = cfg.url || readMeta('supabase-url') || (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL)) || '';
-    var anonKey = cfg.anonKey || readMeta('supabase-anon-key') || (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)) || '';
+    var anonKey = cfg.anonKey || readMeta('supabase-anon-key') || (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)) || '';
+
+    if ((!url || !anonKey) && typeof fetch === 'function' && typeof location !== 'undefined' && location.protocol !== 'file:') {
+      try {
+        var response = await fetch('/api/public-config', { cache: 'no-store' });
+        if (response.ok) {
+          var remoteConfig = await response.json();
+          url = url || remoteConfig.url || '';
+          anonKey = anonKey || remoteConfig.publishableKey || '';
+        }
+      } catch (error) {
+        console.error('Could not load public Supabase config:', error);
+      }
+    }
+
     return { url: url, anonKey: anonKey };
   }
 
   async function createClientInstance() {
     var _a;
-    var cfg = getConfig();
+    var cfg = await getConfig();
     var url = cfg.url;
     var anonKey = cfg.anonKey;
 
