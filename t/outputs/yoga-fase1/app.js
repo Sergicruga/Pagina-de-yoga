@@ -59,6 +59,7 @@ const seedItems = [
     fileName: "premium-video.mp4"
   }
 ];
+const seedItemIds = new Set(seedItems.map((item) => item.id));
 
 const seedUsers = [
   { email: "alumna@demo.com", name: "Alumna/o Demo", passwordHash: "demo:demo123", role: "user", premium: false, purchases: [] },
@@ -527,8 +528,10 @@ async function syncContentFromDatabase() {
     if (error) throw error;
 
     const databaseItems = (data || []).map(itemFromDatabase);
-    const localItems = state.items.filter((item) => !item.databaseId);
-    state.items = [...databaseItems, ...localItems];
+    const localItems = state.items.filter((item) => !item.databaseId && !seedItemIds.has(item.id));
+    state.items = databaseItems.length > 0
+      ? [...databaseItems, ...localItems]
+      : [...seedItems, ...localItems];
     saveState();
     renderPublicContent();
     if (state.session && window.location.hash === "#dashboard") renderDashboard();
@@ -923,7 +926,8 @@ function contentCard(item) {
   const locked = !canOpen(item);
   const hasPreview = item.previewEnabled;
   const hasIndividualPrice = item.premium && item.price > 0;
-  const canBuySingle = locked && hasIndividualPrice;
+  const isDemoContent = seedItemIds.has(item.id) && !item.databaseId;
+  const canBuySingle = locked && hasIndividualPrice && !isDemoContent;
   const typeLabel = item.type === "video" ? "Video" : "Audio";
   const symbol = item.type === "video" ? "play" : "audio";
   const boughtSingle = Boolean(user?.purchases?.includes(item.id));
@@ -948,8 +952,10 @@ function contentCard(item) {
       </div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml(item.description)}</p>
-      ${locked ? `<p class="preview-note">${hasIndividualPrice
-        ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
+      ${locked ? `<p class="preview-note">${isDemoContent
+        ? "Contenido de muestra. La compra individual se activa cuando la profesora publica la clase."
+        : hasIndividualPrice
+          ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
         : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(item.fileName || "archivo-demo")}</p>
       <div class="card-actions">
