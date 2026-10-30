@@ -485,39 +485,6 @@ function safeStorageFileName(fileName) {
   return normalizedName || "archivo";
 }
 
-<<<<<<< HEAD
-function getYouTubeVideoId(value) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:") return null;
-
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    let videoId = null;
-    if (host === "youtu.be") {
-      videoId = url.pathname.split("/").filter(Boolean)[0];
-    } else if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
-      if (url.pathname === "/watch") {
-        videoId = url.searchParams.get("v");
-      } else {
-        videoId = url.pathname.match(/^\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})(?:\/|$)/)?.[1] || null;
-      }
-    }
-
-    return /^[A-Za-z0-9_-]{11}$/.test(videoId || "") ? videoId : null;
-  } catch {
-    return null;
-  }
-}
-
-function youtubeEmbedUrl(videoId, previewDuration = 0) {
-  const url = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`);
-  url.searchParams.set("playsinline", "1");
-  url.searchParams.set("rel", "0");
-  if (previewDuration > 0) url.searchParams.set("end", String(previewDuration));
-  return url.toString();
-}
-
-=======
 const contentTypeLabels = {
   video: "Video",
   audio: "Audio",
@@ -632,7 +599,6 @@ const lessonSelect = `
   )
 `;
 
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 function itemFromDatabase(row) {
   const assets = (Array.isArray(row.media) ? row.media : [])
     .map(assetFromDatabase)
@@ -657,17 +623,10 @@ function itemFromDatabase(row) {
     premium: Boolean(row.is_premium),
     previewEnabled: Boolean(row.preview_enabled),
     previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
-<<<<<<< HEAD
-    fileName: media?.file_name || "Sin archivo",
-    mediaUrl: media?.url || "",
-    youtubeUrl: media?.type === "video" && getYouTubeVideoId(media.url) ? media.url : "",
-    hasStoredMedia: Boolean(media?.url)
-=======
     fileName: assets.length > 1 ? `${assets.length} recursos` : primaryAsset?.fileName || (type === "thought" ? "Texto" : "Sin archivo"),
     mediaUrl: primaryAsset?.url || "",
     assets,
     hasStoredMedia: assets.some((asset) => Boolean(asset.url))
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   };
 }
 async function syncContentFromDatabase() {
@@ -781,75 +740,11 @@ async function saveContentToDatabase(item, inputs = {}) {
           metadata: { provider: "youtube", videoId }
         });
       }
-<<<<<<< HEAD
-    } else if (item.youtubeUrl) {
-      if (!getYouTubeVideoId(item.youtubeUrl)) throw new Error("El enlace de YouTube no es valido.");
-
-      const mediaPayload = {
-        lesson_id: lesson.id,
-        title: item.title,
-        type: "video",
-        url: item.youtubeUrl,
-        storage_path: null,
-        file_name: "YouTube",
-        mime_type: null,
-        file_size_bytes: null,
-        duration_seconds: previewLimitInSeconds(item.duration) || null,
-        position: 0,
-        metadata: {
-          category: item.category,
-          level: item.level,
-          premium: Boolean(item.premium),
-          provider: "youtube"
-        }
-      };
-
-      if (item.mediaId) {
-        const { data, error } = await db
-          .from("media")
-          .update(mediaPayload)
-          .eq("id", item.mediaId)
-          .select()
-          .single();
-        if (error) throw error;
-        mediaRecord = data;
-      } else {
-        const { data, error } = await db
-          .from("media")
-          .insert(mediaPayload)
-          .select()
-          .single();
-        if (error) throw error;
-        mediaRecord = data;
-      }
-
-      if (item.storagePath) {
-        const { error: removeError } = await db.storage
-          .from(supabaseMediaBucket)
-          .remove([item.storagePath]);
-        if (removeError) console.error("Could not remove previous Supabase media:", removeError);
-      }
-=======
     } else if (existingVideo) {
       retainedAssets.push(existingVideo);
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     }
   }
 
-<<<<<<< HEAD
-  return {
-    ...item,
-    id: databaseItemId(lesson.id),
-    databaseId: lesson.id,
-    mediaId: mediaRecord?.id || null,
-    storagePath: mediaRecord?.storage_path || null,
-    mediaUrl: mediaRecord?.url || "",
-    youtubeUrl: mediaRecord?.type === "video" && getYouTubeVideoId(mediaRecord.url) ? mediaRecord.url : "",
-    fileName: mediaRecord?.file_name || item.fileName || "Sin archivo",
-    hasStoredMedia: Boolean(mediaRecord?.url)
-  };
-}
-=======
   async function prepareUploadedAsset(type, file, position) {
     const existing = existingAssets.find((asset) => asset.type === type);
     if (!allowedTypes.includes(type)) return;
@@ -857,7 +752,6 @@ async function saveContentToDatabase(item, inputs = {}) {
       if (existing) retainedAssets.push(existing);
       return;
     }
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 
     const storagePath = `${lesson.id}/${Date.now()}-${type}-${safeStorageFileName(file.name)}`;
     const { error: uploadError } = await db.storage
@@ -1050,13 +944,12 @@ function showView(route) {
     renderPublicContent();
   }
 
-<<<<<<< HEAD
   if (visibleRoute === "suscripcion") {
     renderSubscriptionPlans();
-=======
+  }
+
   if (visibleRoute === "sobre") {
     renderAboutContent();
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   }
 
   if (serviceKey) {
@@ -1213,22 +1106,6 @@ function contentCard(item) {
   };
   const boughtSingle = Boolean(user?.purchases?.includes(item.id));
   const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
-<<<<<<< HEAD
-  const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
-  const youtubeVideoId = item.type === "video"
-    ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
-    : null;
-  const youtubePreviewDuration = previewLimitInSeconds(item.previewDuration);
-  const previewAvailable = hasPreview && (!youtubeVideoId || (locked && youtubePreviewDuration > 0));
-  const showYouTubePlayer = Boolean(youtubeVideoId && (!locked || previewAvailable));
-  const media = showYouTubePlayer
-    ? `<iframe class="media-player youtube-player" src="${escapeHtml(youtubeEmbedUrl(youtubeVideoId, locked ? youtubePreviewDuration : 0))}" title="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
-    : mediaUrl && !locked
-      ? item.type === "video"
-        ? `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></video>`
-        : `<audio class="media-player" controls preload="metadata" src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></audio>`
-      : `<div class="media-thumb">${symbol}</div>`;
-=======
   const assets = normalizeItemAssets(item);
   const videoAsset = assets.find((asset) => asset.type === "video");
   const audioAsset = assets.find((asset) => asset.type === "audio");
@@ -1249,25 +1126,16 @@ function contentCard(item) {
     : item.type === "thought"
       ? "Lectura"
       : item.fileName || "Contenido";
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 
   return `
     <article class="content-card ${locked ? "locked" : ""}">
       ${media}
       <div class="card-meta">
-<<<<<<< HEAD
-        <span class="chip">${typeLabel}</span>
-        <span class="chip">${item.category}</span>
-        <span class="chip">${item.level}</span>
-        <span class="chip ${item.premium ? "premium" : ""}">${accessText}</span>
-        ${previewAvailable ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
-=======
         <span class="chip">${escapeHtml(typeLabel)}</span>
         <span class="chip">${escapeHtml(item.category)}</span>
         <span class="chip">${escapeHtml(item.level)}</span>
         <span class="chip ${item.premium ? "premium" : ""}">${escapeHtml(accessText)}</span>
         ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
@@ -1280,7 +1148,7 @@ function contentCard(item) {
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(resourceLabel)}</p>
       <div class="card-actions">
         ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
-        ${previewAvailable ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
+        ${hasPreview ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
         ${canBuySingle ? `<button class="primary-button" type="button" data-buy-item="${item.id}">Comprar ${escapeHtml(formatPrice(item.price))}</button>` : ""}
         ${locked && item.premium && !hasIndividualPrice ? `<button class="secondary-button" type="button" data-price-pending>Compra individual: precio pendiente</button>` : ""}
         ${locked ? `<button class="secondary-button" type="button" data-route="suscripcion">Ver planes</button>` : ""}
@@ -1338,15 +1206,6 @@ function renderAdminRows() {
   `).join("");
 }
 
-<<<<<<< HEAD
-function updateVideoSourceFields() {
-  const isVideo = document.querySelector("#itemType").value === "video";
-  const isYouTube = isVideo && document.querySelector("#itemVideoSource").value === "youtube";
-  document.querySelector("#itemVideoSourceField").hidden = !isVideo;
-  document.querySelector("#itemYoutubeUrlField").hidden = !isYouTube;
-  document.querySelector("#itemYoutubeHelp").hidden = !isYouTube;
-  document.querySelector("#itemFileField").hidden = isYouTube;
-=======
 function updateContentTypeFields(syncCategory = false) {
   const type = document.querySelector("#itemType").value;
   const youtubeField = document.querySelector("#itemYoutubeField");
@@ -1376,13 +1235,11 @@ function updateContentTypeFields(syncCategory = false) {
   if (syncCategory && !["book", "thought"].includes(type) && categoryInput.value === "Sobre mi") {
     categoryInput.value = "Yoga";
   }
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 }
 
 function resetContentEditor() {
   editingItemId = null;
   contentForm.reset();
-  updateVideoSourceFields();
   contentFormTitle.textContent = "Subir contenido";
   contentSubmitButton.textContent = "Guardar contenido";
   cancelEditButton.hidden = true;
@@ -1405,8 +1262,6 @@ function editContentItem(item) {
   document.querySelector("#itemDescription").value = item.description || "";
   document.querySelector("#itemBody").value = item.body || "";
   document.querySelector("#itemType").value = item.type || "video";
-  document.querySelector("#itemVideoSource").value = item.youtubeUrl ? "youtube" : "file";
-  document.querySelector("#itemYoutubeUrl").value = item.youtubeUrl || "";
   document.querySelector("#itemCategory").value = item.category || "Yoga";
   document.querySelector("#itemLevel").value = item.level || "Principiante";
   document.querySelector("#itemDuration").value = item.duration || "";
@@ -1414,9 +1269,6 @@ function editContentItem(item) {
   document.querySelector("#itemPremium").checked = Boolean(item.premium);
   document.querySelector("#itemPreview").checked = Boolean(item.previewEnabled);
   document.querySelector("#itemPreviewDuration").value = item.previewDuration || "";
-<<<<<<< HEAD
-  updateVideoSourceFields();
-=======
   document.querySelector("#itemYoutubeUrl").value = youtubeVideoId(videoAsset?.url) ? videoAsset.url : "";
   document.querySelector("#itemAudioStatus").textContent = audioAsset
     ? `Audio actual: ${audioAsset.fileName}. Selecciona otro para sustituirlo.`
@@ -1429,7 +1281,6 @@ function editContentItem(item) {
   if (videoAsset?.url && !youtubeVideoId(videoAsset.url)) {
     document.querySelector("#itemTypeHelp").textContent += " El video MP4 actual se conservara mientras no pegues un enlace nuevo.";
   }
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   contentFormTitle.textContent = `Editar: ${item.title}`;
   contentSubmitButton.textContent = "Guardar cambios";
   cancelEditButton.hidden = false;
@@ -1917,28 +1768,6 @@ function createPlayableMedia(asset, item, previewLimit = 0) {
     return iframe;
   }
 
-<<<<<<< HEAD
-  const restrictedPreview = preview && item.premium && !canOpen(item);
-  const youtubeVideoId = item.type === "video"
-    ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
-    : null;
-  const media = youtubeVideoId
-    ? document.createElement("iframe")
-    : document.createElement(item.type === "video" ? "video" : "audio");
-  media.className = "dialog-media";
-  if (youtubeVideoId) {
-    const previewDuration = restrictedPreview ? previewLimitInSeconds(item.previewDuration) : 0;
-    media.src = youtubeEmbedUrl(youtubeVideoId, previewDuration);
-    media.title = item.title;
-    media.allow = "accelerometer; encrypted-media; gyroscope; picture-in-picture";
-    media.allowFullscreen = true;
-    media.referrerPolicy = "strict-origin-when-cross-origin";
-  } else {
-    media.controls = true;
-    media.preload = "metadata";
-    media.src = mediaUrl;
-    if (item.type === "video") media.playsInline = true;
-=======
   const media = document.createElement(asset.type === "video" ? "video" : "audio");
   media.className = "dialog-media";
   media.controls = true;
@@ -1994,33 +1823,19 @@ function openMediaViewer(item, preview = false) {
       fileName: item.fileName || "Contenido",
       mimeType: ""
     });
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   }
 
   mediaDialogTitle.textContent = restrictedPreview ? `Trailer: ${item.title}` : item.title;
   mediaDialogBody.replaceChildren();
 
-<<<<<<< HEAD
-  if (restrictedPreview) {
-    const limit = previewLimitInSeconds(item.previewDuration);
-=======
   const previewLimit = preview ? previewLimitInSeconds(item.previewDuration) : 0;
   if (preview) {
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     const note = document.createElement("p");
     note.className = "media-preview-note";
     note.textContent = `Vista previa disponible: ${item.previewDuration || "duracion limitada"}.`;
     mediaDialogBody.append(note);
   }
 
-<<<<<<< HEAD
-    if (limit > 0 && !youtubeVideoId) {
-      media.addEventListener("timeupdate", () => {
-        if (media.currentTime < limit) return;
-        media.pause();
-        media.currentTime = 0;
-        notify("Has llegado al final del trailer.");
-=======
   if (!preview && item.type === "thought") {
     const body = document.createElement("div");
     body.className = "thought-body";
@@ -2031,7 +1846,6 @@ function openMediaViewer(item, preview = false) {
         const text = document.createElement("p");
         text.textContent = paragraph;
         body.append(text);
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
       });
     mediaDialogBody.append(body);
   } else if (preview) {
@@ -2076,12 +1890,8 @@ function openMediaViewer(item, preview = false) {
   }
 
   mediaDialog.showModal();
-<<<<<<< HEAD
-  if (!youtubeVideoId) media.play().catch(() => {});
-=======
   const firstPlayable = mediaDialogBody.querySelector("audio, video");
   firstPlayable?.play().catch(() => {});
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 }
 
 function closeMediaViewer() {
@@ -2089,18 +1899,6 @@ function closeMediaViewer() {
 }
 
 function clearMediaViewer() {
-<<<<<<< HEAD
-  const media = mediaDialogBody.querySelector("audio, video, iframe");
-  if (media) {
-    if (media instanceof HTMLIFrameElement) {
-      media.src = "about:blank";
-    } else {
-      media.pause();
-      media.removeAttribute("src");
-      media.load();
-    }
-  }
-=======
   mediaDialogBody.querySelectorAll("audio, video").forEach((media) => {
     media.pause();
     media.removeAttribute("src");
@@ -2109,7 +1907,6 @@ function clearMediaViewer() {
   mediaDialogBody.querySelectorAll("iframe").forEach((frame) => {
     frame.src = "about:blank";
   });
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   mediaDialogBody.replaceChildren();
 }
 function updateHeader() {
@@ -2542,11 +2339,6 @@ contentForm.addEventListener("submit", async (event) => {
   const bookFile = document.querySelector("#itemBookFile").files[0] || null;
   const premiumInput = document.querySelector("#itemPremium");
   const priceInput = document.querySelector("#itemPrice");
-  const type = document.querySelector("#itemType").value;
-  const isYouTube = type === "video" && document.querySelector("#itemVideoSource").value === "youtube";
-  const youtubeUrl = document.querySelector("#itemYoutubeUrl").value.trim();
-  const previewEnabled = document.querySelector("#itemPreview").checked;
-  const previewDuration = document.querySelector("#itemPreviewDuration").value || "2 min";
   const price = Number(priceInput.value || 0);
   const existingItem = editingItemId
     ? state.items.find((entry) => entry.id === editingItemId)
@@ -2566,28 +2358,12 @@ contentForm.addEventListener("submit", async (event) => {
     return;
   }
 
-<<<<<<< HEAD
-  if (isYouTube && !getYouTubeVideoId(youtubeUrl)) {
-    notify("Introduce un enlace valido de YouTube (youtube.com o youtu.be).");
-=======
   if (youtubeUrl && !youtubeVideoId(youtubeUrl)) {
     notify("Pega un enlace valido de YouTube.");
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     document.querySelector("#itemYoutubeUrl").focus();
     return;
   }
 
-<<<<<<< HEAD
-  if (isYouTube && file) {
-    notify("Elige un enlace de YouTube o un archivo, no ambos.");
-    fileInput.focus();
-    return;
-  }
-
-  if (isYouTube && premiumInput.checked && previewEnabled && previewLimitInSeconds(previewDuration) <= 0) {
-    notify("Indica una duracion de trailer valida para el video de YouTube.");
-    document.querySelector("#itemPreviewDuration").focus();
-=======
   if (type === "video" && !hasVideo) {
     notify("Pega el enlace de YouTube del video.");
     document.querySelector("#itemYoutubeUrl").focus();
@@ -2614,7 +2390,6 @@ contentForm.addEventListener("submit", async (event) => {
 
   if (type === "pack" && (!hasVideo || !hasAudio || !hasBook)) {
     notify("El pack necesita un video de YouTube, un audio y un libro.");
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     return;
   }
 
@@ -2625,43 +2400,20 @@ contentForm.addEventListener("submit", async (event) => {
     return;
   }
 
-<<<<<<< HEAD
-  const existingItem = editingItemId
-    ? state.items.find((entry) => entry.id === editingItemId)
-    : null;
-  if (!isYouTube && existingItem?.youtubeUrl && !file) {
-    notify("Selecciona un archivo para sustituir el enlace de YouTube.");
-    fileInput.focus();
-    return;
-  }
-=======
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   let item = {
     ...existingItem,
     id: existingItem?.id || `item-${Date.now()}`,
     title: rawTitle,
-<<<<<<< HEAD
-    description: document.querySelector("#itemDescription").value,
-    type,
-    youtubeUrl: isYouTube ? youtubeUrl : "",
-=======
     description: document.querySelector("#itemDescription").value.trim(),
     body,
     type,
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
     duration: document.querySelector("#itemDuration").value.trim() || (["book", "thought"].includes(type) ? "Lectura libre" : "Sin duracion"),
     price,
     premium: premiumInput.checked,
-<<<<<<< HEAD
-    previewEnabled,
-    previewDuration,
-    fileName: isYouTube ? "YouTube" : file?.name || existingItem?.fileName || "archivo-local-demo"
-=======
     previewEnabled: document.querySelector("#itemPreview").checked && ["video", "audio", "pack"].includes(type),
     previewDuration: document.querySelector("#itemPreviewDuration").value.trim() || "2 min"
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   };
 
   const wasEditing = Boolean(existingItem);
@@ -2669,21 +2421,6 @@ contentForm.addEventListener("submit", async (event) => {
   contentSubmitButton.textContent = "Guardando...";
 
   try {
-<<<<<<< HEAD
-    let fileForUpload = file;
-    if (!fileForUpload && !item.youtubeUrl && existingItem?.hasStoredMedia && !existingItem.databaseId) {
-      const storedRecord = await getStoredMedia(existingItem.id);
-      if (storedRecord?.blob) {
-        fileForUpload = new File(
-          [storedRecord.blob],
-          storedRecord.name || existingItem.fileName || "archivo",
-          { type: storedRecord.type || storedRecord.blob.type }
-        );
-      }
-    }
-
-=======
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     const previousItemId = item.id;
     item = await saveContentToDatabase(item, { youtubeUrl, audioFile, bookFile });
 
@@ -2714,25 +2451,6 @@ contentForm.addEventListener("submit", async (event) => {
     contentSubmitButton.textContent = editingItemId ? "Guardar cambios" : "Guardar contenido";
   }
 });
-<<<<<<< HEAD
-
-document.querySelector("#itemType").addEventListener("change", () => {
-  if (document.querySelector("#itemType").value !== "video") {
-    document.querySelector("#itemVideoSource").value = "file";
-    document.querySelector("#itemYoutubeUrl").value = "";
-  }
-  updateVideoSourceFields();
-});
-document.querySelector("#itemVideoSource").addEventListener("change", () => {
-  if (document.querySelector("#itemVideoSource").value === "youtube") {
-    document.querySelector("#itemFile").value = "";
-  } else {
-    document.querySelector("#itemYoutubeUrl").value = "";
-  }
-  updateVideoSourceFields();
-});
-=======
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 typeFilter.addEventListener("change", renderPublicContent);
 categoryFilter.addEventListener("change", renderPublicContent);
 
@@ -2742,11 +2460,8 @@ updateHeader();
 renderSiteContent();
 showTeacherSlide(0);
 renderPublicContent();
-<<<<<<< HEAD
 loadSubscriptionPlans();
-=======
 updateContentTypeFields();
->>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 routeFromHash();
 processCheckoutReturn();
 restoreStoredMedia().then(syncContentFromDatabase);
