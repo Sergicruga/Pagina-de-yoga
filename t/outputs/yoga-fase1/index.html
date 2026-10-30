@@ -17,6 +17,7 @@
       </a>
       <nav class="main-nav" aria-label="Navegacion principal">
         <a href="#inicio" data-route="inicio">Inicio</a>
+        <a href="#sobre" data-route="sobre">Sobre mi</a>
         <a href="#clases" data-route="clases">Clases</a>
         <a href="#contenido" data-route="contenido">Contenido</a>
         <a href="#suscripcion" data-route="suscripcion">Suscripcion</a>
@@ -143,10 +144,18 @@
             <p>Una biblioteca privada para alumnas que quieren seguir practicando con acompanamiento constante.</p>
           </article>
         </div>
+        <section class="about-library" aria-labelledby="aboutLibraryTitle">
+          <div class="section-heading compact-heading">
+            <p class="eyebrow">Libros y reflexiones</p>
+            <h3 id="aboutLibraryTitle">Un espacio para compartir con calma</h3>
+            <p>Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla.</p>
+          </div>
+          <div class="content-grid about-grid" id="aboutContentGrid"></div>
+        </section>
         <div class="teacher-cta">
           <div>
             <p class="eyebrow">Zona privada</p>
-            <h3>Miriam podra subir videos y audios desde su panel</h3>
+            <h3>Miriam podra publicar videos, audios, libros, pensamientos y packs desde su panel</h3>
           </div>
           <button class="primary-button" type="button" data-route="dashboard">Ver panel demo</button>
         </div>
@@ -213,6 +222,9 @@
               <option value="all">Todo</option>
               <option value="video">Videos</option>
               <option value="audio">Audios</option>
+              <option value="book">Libros</option>
+              <option value="thought">Pensamientos</option>
+              <option value="pack">Packs</option>
             </select>
             <select id="categoryFilter" aria-label="Filtrar por categoria">
               <option value="all">Categorias</option>
@@ -220,6 +232,7 @@
               <option value="Meditacion">Meditacion</option>
               <option value="Respiracion">Respiracion</option>
               <option value="Relajacion">Relajacion</option>
+              <option value="Sobre mi">Sobre mi</option>
             </select>
           </div>
         </div>
@@ -309,8 +322,11 @@
               <div class="form-grid">
                 <label>Tipo
                   <select id="itemType">
-                    <option value="video">Video</option>
+                    <option value="video">Video de YouTube</option>
                     <option value="audio">Audio</option>
+                    <option value="book">Libro / PDF</option>
+                    <option value="thought">Pensamiento</option>
+                    <option value="pack">Pack de contenidos</option>
                   </select>
                 </label>
                 <label>Categoria
@@ -319,6 +335,7 @@
                     <option>Meditacion</option>
                     <option>Respiracion</option>
                     <option>Relajacion</option>
+                    <option>Sobre mi</option>
                   </select>
                 </label>
                 <label>Nivel
@@ -331,6 +348,7 @@
                 <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
                 <label>Precio individual (obligatorio si es premium)<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
               </div>
+<<<<<<< HEAD
               <label id="itemVideoSourceField">Origen del video
                 <select id="itemVideoSource">
                   <option value="file">Archivo</option>
@@ -342,6 +360,24 @@
               </label>
               <p class="form-help" id="itemYoutubeHelp" hidden>Los videos deben permitir la insercion. El acceso Premium de esta web no sustituye una membresia de YouTube; los videos publicos o no listados pueden seguir siendo accesibles desde su enlace original.</p>
               <label id="itemFileField">Archivo multimedia<input id="itemFile" type="file" accept="audio/*,video/*"></label>
+=======
+              <label id="itemBodyField" hidden>Texto completo<textarea id="itemBody" rows="7" placeholder="Escribe aqui el pensamiento, introduccion o contenido que quieras compartir"></textarea></label>
+              <div class="content-source-grid">
+                <label id="itemYoutubeField">Enlace de YouTube
+                  <input id="itemYoutubeUrl" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=...">
+                  <small>Puede ser un enlace normal, corto, Shorts o embed.</small>
+                </label>
+                <label id="itemAudioField" hidden>Archivo de audio
+                  <input id="itemAudioFile" type="file" accept="audio/*">
+                  <small id="itemAudioStatus">MP3, M4A, WAV u otro formato de audio.</small>
+                </label>
+                <label id="itemBookField" hidden>Libro o documento
+                  <input id="itemBookFile" type="file" accept=".pdf,.epub,application/pdf,application/epub+zip">
+                  <small id="itemBookStatus">PDF o EPUB.</small>
+                </label>
+              </div>
+              <p class="form-help" id="itemTypeHelp">El video se reproducira directamente dentro de la web.</p>
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
               <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>
               <div class="preview-options">
                 <label class="check-row"><input id="itemPreview" type="checkbox"> Permitir trailer para todos</label>

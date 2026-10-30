@@ -153,6 +153,7 @@ const defaultSiteContent = {
   }
 };
 
+const supabaseMediaBucket = "lesson-media";
 const state = loadState();
 
 const views = [...document.querySelectorAll("[data-view]")];
@@ -164,6 +165,7 @@ const loginButton = document.querySelector("#loginButton");
 const registerButton = document.querySelector("#registerButton");
 const logoutButton = document.querySelector("#logoutButton");
 const contentGrid = document.querySelector("#contentGrid");
+const aboutContentGrid = document.querySelector("#aboutContentGrid");
 const dashboardGrid = document.querySelector("#dashboardGrid");
 const typeFilter = document.querySelector("#typeFilter");
 const categoryFilter = document.querySelector("#categoryFilter");
@@ -211,7 +213,7 @@ let authMode = "login";
 const mediaUrls = new Map();
 const mediaDatabaseName = "luma-yoga-media";
 const mediaStoreName = "uploads";
-const supabaseMediaBucket = "lesson-media";
+
 const siteTeacherPhotoStorageId = "site-teacher-photo";
 let pendingPanel = null;
 let editingItemId = null;
@@ -271,6 +273,8 @@ function normalizeState(savedState) {
     siteContent: normalizeSiteContent(savedState.siteContent),
     items: mergedItems.map((item) => ({
       ...item,
+      body: item.body || "",
+      assets: normalizeItemAssets(item),
       price: item.price ?? (item.premium ? 6 : 0),
       previewEnabled: item.previewEnabled ?? (item.premium && ["item-3", "item-4"].includes(item.id)),
       previewDuration: item.previewDuration ?? (item.id === "item-4" ? "4 min" : "2 min")
@@ -481,6 +485,7 @@ function safeStorageFileName(fileName) {
   return normalizedName || "archivo";
 }
 
+<<<<<<< HEAD
 function getYouTubeVideoId(value) {
   try {
     const url = new URL(value);
@@ -512,35 +517,159 @@ function youtubeEmbedUrl(videoId, previewDuration = 0) {
   return url.toString();
 }
 
+=======
+const contentTypeLabels = {
+  video: "Video",
+  audio: "Audio",
+  book: "Libro",
+  thought: "Pensamiento",
+  pack: "Pack"
+};
+
+function contentTypeLabel(type) {
+  return contentTypeLabels[type] || "Contenido";
+}
+
+function youtubeVideoId(value) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+
+  try {
+    const url = new URL(source.startsWith("http") ? source : `https://${source}`);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || "";
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
+      if (url.searchParams.get("v")) return url.searchParams.get("v");
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (["embed", "shorts", "live"].includes(parts[0])) return parts[1] || "";
+    }
+  } catch (error) {
+    return "";
+  }
+
+  return "";
+}
+
+function youtubeEmbedUrl(value, endSeconds = 0) {
+  const videoId = youtubeVideoId(value);
+  if (!videoId) return "";
+  const url = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`);
+  url.searchParams.set("rel", "0");
+  url.searchParams.set("playsinline", "1");
+  if (endSeconds > 0) {
+    url.searchParams.set("end", String(endSeconds));
+    url.searchParams.set("autoplay", "1");
+  }
+  return url.toString();
+}
+
+function normalizeItemAssets(item) {
+  if (Array.isArray(item?.assets) && item.assets.length > 0) return [...item.assets];
+  if (!item?.mediaUrl) return [];
+  return [{
+    id: item.mediaId || null,
+    type: item.type === "book" ? "document" : item.type,
+    url: item.mediaUrl,
+    storageBucket: item.storagePath ? supabaseMediaBucket : null,
+    storagePath: item.storagePath || null,
+    fileName: item.fileName || "archivo",
+    mimeType: "",
+    metadata: {}
+  }];
+}
+
+function assetFromDatabase(entry) {
+  return {
+    id: entry.id,
+    type: entry.type,
+    url: entry.url || "",
+    storageBucket: entry.storage_bucket || null,
+    storagePath: entry.storage_path || null,
+    fileName: entry.file_name || entry.title || "archivo",
+    mimeType: entry.mime_type || "",
+    fileSize: Number(entry.file_size_bytes || 0),
+    durationSeconds: Number(entry.duration_seconds || 0),
+    position: Number(entry.position || 0),
+    metadata: entry.metadata || {}
+  };
+}
+
+function inferContentType(row, assets) {
+  if (assets.length > 1) return "pack";
+  if (assets[0]?.type === "document") return "book";
+  if (assets[0]?.type === "audio") return "audio";
+  if (assets[0]?.type === "video") return "video";
+  return row.body ? "thought" : "video";
+}
+
+const lessonSelect = `
+  id,
+  title,
+  description,
+  body,
+  is_premium,
+  price_individual,
+  preview_enabled,
+  preview_duration_seconds,
+  level,
+  duration,
+  duration_seconds,
+  category,
+  is_published,
+  created_at,
+  media (
+    id,
+    type,
+    url,
+    storage_bucket,
+    storage_path,
+    file_name,
+    mime_type,
+    file_size_bytes,
+    duration_seconds,
+    position,
+    metadata
+  )
+`;
+
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 function itemFromDatabase(row) {
-  const mediaRecords = Array.isArray(row.media) ? row.media : [];
-  const media = [...mediaRecords]
-    .sort((first, second) => Number(first.position || 0) - Number(second.position || 0))
-    .find((entry) => entry.type === "video" || entry.type === "audio");
+  const assets = (Array.isArray(row.media) ? row.media : [])
+    .map(assetFromDatabase)
+    .sort((first, second) => first.position - second.position);
+  const type = inferContentType(row, assets);
+  const primaryAsset = assets.find((asset) => asset.type === "video") || assets[0] || null;
 
   return {
     id: databaseItemId(row.id),
     databaseId: row.id,
-    mediaId: media?.id || null,
-    storagePath: media?.storage_path || null,
+    mediaId: primaryAsset?.id || null,
+    storagePath: primaryAsset?.storagePath || null,
     title: row.title,
     description: row.description || "",
-    type: media?.type || "video",
-    category: row.category || "Yoga",
-    level: row.level || "Principiante",
-    duration: row.duration || formatDuration(Number(row.duration_seconds || media?.duration_seconds || 0)) || "Sin duracion",
-    durationSeconds: Number(row.duration_seconds || media?.duration_seconds || 0),
+    body: row.body || "",
+    type,
+    category: row.category || (type === "book" || type === "thought" ? "Sobre mi" : "Yoga"),
+    level: row.level || "Todos los niveles",
+    duration: row.duration || formatDuration(Number(row.duration_seconds || primaryAsset?.durationSeconds || 0)) || "Lectura libre",
+    durationSeconds: Number(row.duration_seconds || primaryAsset?.durationSeconds || 0),
     price: Number(row.price_individual || 0),
     premium: Boolean(row.is_premium),
     previewEnabled: Boolean(row.preview_enabled),
     previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
+<<<<<<< HEAD
     fileName: media?.file_name || "Sin archivo",
     mediaUrl: media?.url || "",
     youtubeUrl: media?.type === "video" && getYouTubeVideoId(media.url) ? media.url : "",
     hasStoredMedia: Boolean(media?.url)
+=======
+    fileName: assets.length > 1 ? `${assets.length} recursos` : primaryAsset?.fileName || (type === "thought" ? "Texto" : "Sin archivo"),
+    mediaUrl: primaryAsset?.url || "",
+    assets,
+    hasStoredMedia: assets.some((asset) => Boolean(asset.url))
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   };
 }
-
 async function syncContentFromDatabase() {
   try {
     const db = await getDatabase();
@@ -548,33 +677,7 @@ async function syncContentFromDatabase() {
 
     const { data, error } = await db
       .from("lessons")
-      .select(`
-        id,
-        title,
-        description,
-        is_premium,
-        price_individual,
-        preview_enabled,
-        preview_duration_seconds,
-        level,
-        duration,
-        duration_seconds,
-        category,
-        is_published,
-        created_at,
-        media (
-          id,
-          type,
-          url,
-          storage_bucket,
-          storage_path,
-          file_name,
-          mime_type,
-          file_size_bytes,
-          duration_seconds,
-          position
-        )
-      `)
+      .select(lessonSelect)
       .eq("is_published", true)
       .order("created_at", { ascending: false });
 
@@ -594,13 +697,14 @@ async function syncContentFromDatabase() {
   }
 }
 
-async function saveContentToDatabase(item, file) {
+async function saveContentToDatabase(item, inputs = {}) {
   const db = await getDatabase();
   if (!db) throw new Error("No se pudo iniciar la conexion con Supabase");
 
   const lessonPayload = {
     title: item.title,
     description: item.description || null,
+    body: item.body || null,
     is_premium: Boolean(item.premium),
     price_individual: Number(item.price || 0),
     preview_enabled: Boolean(item.previewEnabled),
@@ -615,6 +719,8 @@ async function saveContentToDatabase(item, file) {
 
   let lesson;
   let createdLesson = false;
+  const uploadedPaths = [];
+  const createdMediaIds = [];
 
   if (item.databaseId) {
     const { data, error } = await db
@@ -643,77 +749,39 @@ async function saveContentToDatabase(item, file) {
     createdLesson = true;
   }
 
-  let mediaRecord = item.mediaId ? {
-    id: item.mediaId,
-    url: item.mediaUrl,
-    storage_path: item.storagePath,
-    file_name: item.fileName,
-    type: item.type
-  } : null;
-  let uploadedPath = null;
+  const existingAssets = normalizeItemAssets(item);
+  const allowedTypes = {
+    video: ["video"],
+    audio: ["audio"],
+    book: ["document"],
+    thought: [],
+    pack: ["video", "audio", "document"]
+  }[item.type] || [];
+  const retainedAssets = [];
+  const newAssets = [];
 
-  try {
-    if (file) {
-      uploadedPath = `${lesson.id}/${Date.now()}-${safeStorageFileName(file.name)}`;
-      const { error: uploadError } = await db.storage
-        .from(supabaseMediaBucket)
-        .upload(uploadedPath, file, {
-          cacheControl: "3600",
-          contentType: file.type || undefined,
-          upsert: false
-        });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = db.storage
-        .from(supabaseMediaBucket)
-        .getPublicUrl(uploadedPath);
-      const publicUrl = publicUrlData?.publicUrl;
-      if (!publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
-
-      const mediaPayload = {
-        lesson_id: lesson.id,
-        title: item.title,
-        type: item.type,
-        url: publicUrl,
-        storage_bucket: supabaseMediaBucket,
-        storage_path: uploadedPath,
-        file_name: file.name,
-        mime_type: file.type || null,
-        file_size_bytes: file.size,
-        duration_seconds: previewLimitInSeconds(item.duration) || null,
-        position: 0,
-        metadata: {
-          category: item.category,
-          level: item.level,
-          premium: Boolean(item.premium)
-        }
-      };
-
-      if (item.mediaId) {
-        const { data, error } = await db
-          .from("media")
-          .update(mediaPayload)
-          .eq("id", item.mediaId)
-          .select()
-          .single();
-        if (error) throw error;
-        mediaRecord = data;
+  const existingVideo = existingAssets.find((asset) => asset.type === "video");
+  const youtubeUrl = String(inputs.youtubeUrl || "").trim();
+  if (allowedTypes.includes("video")) {
+    if (youtubeUrl) {
+      const videoId = youtubeVideoId(youtubeUrl);
+      if (!videoId) throw new Error("El enlace de YouTube no es valido");
+      const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      if (existingVideo?.storageBucket === "youtube" && youtubeVideoId(existingVideo.url) === videoId) {
+        retainedAssets.push(existingVideo);
       } else {
-        const { data, error } = await db
-          .from("media")
-          .insert(mediaPayload)
-          .select()
-          .single();
-        if (error) throw error;
-        mediaRecord = data;
+        newAssets.push({
+          type: "video",
+          url: canonicalUrl,
+          storageBucket: "youtube",
+          storagePath: null,
+          fileName: "YouTube",
+          mimeType: "text/html",
+          position: 0,
+          metadata: { provider: "youtube", videoId }
+        });
       }
-
-      if (item.storagePath && item.storagePath !== uploadedPath) {
-        const { error: removeError } = await db.storage
-          .from(supabaseMediaBucket)
-          .remove([item.storagePath]);
-        if (removeError) console.error("Could not remove previous Supabase media:", removeError);
-      }
+<<<<<<< HEAD
     } else if (item.youtubeUrl) {
       if (!getYouTubeVideoId(item.youtubeUrl)) throw new Error("El enlace de YouTube no es valido.");
 
@@ -761,25 +829,14 @@ async function saveContentToDatabase(item, file) {
           .remove([item.storagePath]);
         if (removeError) console.error("Could not remove previous Supabase media:", removeError);
       }
+=======
+    } else if (existingVideo) {
+      retainedAssets.push(existingVideo);
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     }
-  } catch (error) {
-    if (uploadedPath) {
-      try {
-        await db.storage.from(supabaseMediaBucket).remove([uploadedPath]);
-      } catch (cleanupError) {
-        console.error("Could not clean failed Supabase upload:", cleanupError);
-      }
-    }
-    if (createdLesson) {
-      try {
-        await db.from("lessons").delete().eq("id", lesson.id);
-      } catch (cleanupError) {
-        console.error("Could not clean failed Supabase lesson:", cleanupError);
-      }
-    }
-    throw error;
   }
 
+<<<<<<< HEAD
   return {
     ...item,
     id: databaseItemId(lesson.id),
@@ -792,26 +849,121 @@ async function saveContentToDatabase(item, file) {
     hasStoredMedia: Boolean(mediaRecord?.url)
   };
 }
+=======
+  async function prepareUploadedAsset(type, file, position) {
+    const existing = existingAssets.find((asset) => asset.type === type);
+    if (!allowedTypes.includes(type)) return;
+    if (!file) {
+      if (existing) retainedAssets.push(existing);
+      return;
+    }
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 
+    const storagePath = `${lesson.id}/${Date.now()}-${type}-${safeStorageFileName(file.name)}`;
+    const { error: uploadError } = await db.storage
+      .from(supabaseMediaBucket)
+      .upload(storagePath, file, {
+        cacheControl: "3600",
+        contentType: file.type || undefined,
+        upsert: false
+      });
+    if (uploadError) throw uploadError;
+    uploadedPaths.push(storagePath);
+
+    const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(storagePath);
+    if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
+
+    newAssets.push({
+      type,
+      url: publicUrlData.publicUrl,
+      storageBucket: supabaseMediaBucket,
+      storagePath,
+      fileName: file.name,
+      mimeType: file.type || null,
+      fileSize: file.size,
+      durationSeconds: type === "audio" ? previewLimitInSeconds(item.duration) || null : null,
+      position,
+      metadata: { category: item.category, level: item.level, premium: Boolean(item.premium) }
+    });
+  }
+
+  try {
+    await prepareUploadedAsset("audio", inputs.audioFile, 1);
+    await prepareUploadedAsset("document", inputs.bookFile, 2);
+
+    for (const asset of newAssets) {
+      const { data, error } = await db
+        .from("media")
+        .insert({
+          lesson_id: lesson.id,
+          title: item.title,
+          type: asset.type,
+          url: asset.url,
+          storage_bucket: asset.storageBucket,
+          storage_path: asset.storagePath,
+          file_name: asset.fileName,
+          mime_type: asset.mimeType,
+          file_size_bytes: asset.fileSize || null,
+          duration_seconds: asset.durationSeconds || null,
+          position: asset.position,
+          metadata: asset.metadata || {}
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      createdMediaIds.push(data.id);
+      retainedAssets.push(assetFromDatabase(data));
+    }
+
+    const retainedIds = new Set(retainedAssets.map((asset) => asset.id).filter(Boolean));
+    const removedAssets = existingAssets.filter((asset) => asset.id && !retainedIds.has(asset.id));
+    if (removedAssets.length > 0) {
+      const { error: removeMediaError } = await db
+        .from("media")
+        .delete()
+        .in("id", removedAssets.map((asset) => asset.id));
+      if (removeMediaError) throw removeMediaError;
+
+      const oldStoragePaths = removedAssets
+        .filter((asset) => asset.storageBucket === supabaseMediaBucket && asset.storagePath)
+        .map((asset) => asset.storagePath);
+      if (oldStoragePaths.length > 0) {
+        const { error: removeStorageError } = await db.storage.from(supabaseMediaBucket).remove(oldStoragePaths);
+        if (removeStorageError) console.error("Could not remove replaced media:", removeStorageError);
+      }
+    }
+
+    const { data: savedLesson, error: reloadError } = await db
+      .from("lessons")
+      .select(lessonSelect)
+      .eq("id", lesson.id)
+      .single();
+    if (reloadError) throw reloadError;
+    return itemFromDatabase(savedLesson);
+  } catch (error) {
+    if (createdMediaIds.length > 0) await db.from("media").delete().in("id", createdMediaIds);
+    if (uploadedPaths.length > 0) await db.storage.from(supabaseMediaBucket).remove(uploadedPaths);
+    if (createdLesson) await db.from("lessons").delete().eq("id", lesson.id);
+    throw error;
+  }
+}
 async function deleteContentFromDatabase(item) {
   if (!item.databaseId) return;
   const db = await getDatabase();
   if (!db) throw new Error("No se pudo iniciar la conexion con Supabase");
 
-  const { error } = await db
-    .from("lessons")
-    .delete()
-    .eq("id", item.databaseId);
+  const assets = normalizeItemAssets(item);
+  const { error } = await db.from("lessons").delete().eq("id", item.databaseId);
   if (error) throw error;
 
-  if (item.storagePath) {
-    const { error: storageError } = await db.storage
-      .from(supabaseMediaBucket)
-      .remove([item.storagePath]);
+  const storagePaths = assets
+    .filter((asset) => asset.storageBucket === supabaseMediaBucket && asset.storagePath)
+    .map((asset) => asset.storagePath);
+  if (storagePaths.length > 0) {
+    const { error: storageError } = await db.storage.from(supabaseMediaBucket).remove(storagePaths);
     if (storageError) console.error("Could not remove deleted lesson media:", storageError);
   }
 }
-
 function userFromDatabase(row) {
   return {
     id: row.id,
@@ -898,8 +1050,13 @@ function showView(route) {
     renderPublicContent();
   }
 
+<<<<<<< HEAD
   if (visibleRoute === "suscripcion") {
     renderSubscriptionPlans();
+=======
+  if (visibleRoute === "sobre") {
+    renderAboutContent();
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   }
 
   if (serviceKey) {
@@ -923,9 +1080,19 @@ function renderPublicContent() {
     return typeOk && categoryOk;
   });
 
-  contentGrid.innerHTML = items.map(contentCard).join("");
+  contentGrid.innerHTML = items.length
+    ? items.map(contentCard).join("")
+    : '<p class="empty-service-content">Todavia no hay contenido publicado con estos filtros.</p>';
+  renderAboutContent();
 }
 
+function renderAboutContent() {
+  if (!aboutContentGrid) return;
+  const personalItems = state.items.filter((item) => ["book", "thought"].includes(item.type));
+  aboutContentGrid.innerHTML = personalItems.length
+    ? personalItems.map(contentCard).join("")
+    : '<p class="empty-service-content">Proximamente encontraras aqui libros y pensamientos de la profesora.</p>';
+}
 function currentTeacherPhotoUrl() {
   return mediaUrls.get(siteTeacherPhotoStorageId) || "assets/profesora-provisional.png";
 }
@@ -1036,10 +1203,17 @@ function contentCard(item) {
   const hasIndividualPrice = item.premium && item.price > 0;
   const isDemoContent = seedItemIds.has(item.id) && !item.databaseId;
   const canBuySingle = locked && hasIndividualPrice && !isDemoContent;
-  const typeLabel = item.type === "video" ? "Video" : "Audio";
-  const symbol = item.type === "video" ? "play" : "audio";
+  const typeLabel = contentTypeLabel(item.type);
+  const symbols = {
+    video: "play",
+    audio: "audio",
+    book: "libro",
+    thought: "texto",
+    pack: "pack"
+  };
   const boughtSingle = Boolean(user?.purchases?.includes(item.id));
   const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
+<<<<<<< HEAD
   const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
   const youtubeVideoId = item.type === "video"
     ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
@@ -1054,26 +1228,56 @@ function contentCard(item) {
         ? `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></video>`
         : `<audio class="media-player" controls preload="metadata" src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></audio>`
       : `<div class="media-thumb">${symbol}</div>`;
+=======
+  const assets = normalizeItemAssets(item);
+  const videoAsset = assets.find((asset) => asset.type === "video");
+  const audioAsset = assets.find((asset) => asset.type === "audio");
+  const localMediaUrl = mediaUrls.get(item.id);
+  let media = `<div class="media-thumb media-thumb-${escapeHtml(item.type)}">${symbols[item.type] || "abrir"}</div>`;
+
+  if (!locked && videoAsset?.url) {
+    const embedUrl = youtubeEmbedUrl(videoAsset.url);
+    media = embedUrl
+      ? `<iframe class="media-player youtube-player" src="${escapeHtml(embedUrl)}" title="${escapeHtml(item.title)}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`
+      : `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(localMediaUrl || videoAsset.url)}" aria-label="${escapeHtml(item.title)}"></video>`;
+  } else if (!locked && (localMediaUrl || audioAsset?.url)) {
+    media = `<audio class="media-player" controls preload="metadata" src="${escapeHtml(localMediaUrl || audioAsset.url)}" aria-label="${escapeHtml(item.title)}"></audio>`;
+  }
+
+  const resourceLabel = item.type === "pack"
+    ? `${assets.length} recursos`
+    : item.type === "thought"
+      ? "Lectura"
+      : item.fileName || "Contenido";
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 
   return `
     <article class="content-card ${locked ? "locked" : ""}">
       ${media}
       <div class="card-meta">
+<<<<<<< HEAD
         <span class="chip">${typeLabel}</span>
         <span class="chip">${item.category}</span>
         <span class="chip">${item.level}</span>
         <span class="chip ${item.premium ? "premium" : ""}">${accessText}</span>
         ${previewAvailable ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
+=======
+        <span class="chip">${escapeHtml(typeLabel)}</span>
+        <span class="chip">${escapeHtml(item.category)}</span>
+        <span class="chip">${escapeHtml(item.level)}</span>
+        <span class="chip ${item.premium ? "premium" : ""}">${escapeHtml(accessText)}</span>
+        ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
-      <p>${escapeHtml(item.description)}</p>
+      <p>${escapeHtml(item.description || (item.type === "thought" ? item.body.slice(0, 180) : ""))}</p>
       ${locked ? `<p class="preview-note">${isDemoContent
-        ? "Contenido de muestra. La compra individual se activa cuando la profesora publica la clase."
+        ? "Contenido de muestra. La compra individual se activa cuando la profesora lo publica."
         : hasIndividualPrice
           ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
-        : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
-      <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(item.fileName || "archivo-demo")}</p>
+          : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
+      <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(resourceLabel)}</p>
       <div class="card-actions">
         ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
         ${previewAvailable ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
@@ -1084,7 +1288,6 @@ function contentCard(item) {
     </article>
   `;
 }
-
 function renderDashboard() {
   const user = currentUser();
   const teacher = isTeacher();
@@ -1121,7 +1324,7 @@ function renderAdminRows() {
   adminRows.innerHTML = state.items.map((item) => `
     <tr>
       <td>${escapeHtml(item.title)}</td>
-      <td>${item.type === "video" ? "Video" : "Audio"}</td>
+      <td>${escapeHtml(contentTypeLabel(item.type))}</td>
       <td>${item.premium ? "Premium" : "Gratis"}</td>
       <td>${item.premium ? item.price > 0 ? escapeHtml(formatPrice(item.price)) : "Falta precio" : "-"}</td>
       <td>${item.previewEnabled ? escapeHtml(item.previewDuration || "Si") : "No"}</td>
@@ -1135,6 +1338,7 @@ function renderAdminRows() {
   `).join("");
 }
 
+<<<<<<< HEAD
 function updateVideoSourceFields() {
   const isVideo = document.querySelector("#itemType").value === "video";
   const isYouTube = isVideo && document.querySelector("#itemVideoSource").value === "youtube";
@@ -1142,6 +1346,37 @@ function updateVideoSourceFields() {
   document.querySelector("#itemYoutubeUrlField").hidden = !isYouTube;
   document.querySelector("#itemYoutubeHelp").hidden = !isYouTube;
   document.querySelector("#itemFileField").hidden = isYouTube;
+=======
+function updateContentTypeFields(syncCategory = false) {
+  const type = document.querySelector("#itemType").value;
+  const youtubeField = document.querySelector("#itemYoutubeField");
+  const audioField = document.querySelector("#itemAudioField");
+  const bookField = document.querySelector("#itemBookField");
+  const bodyField = document.querySelector("#itemBodyField");
+  const previewOptions = contentForm.querySelector(".preview-options");
+  const categoryInput = document.querySelector("#itemCategory");
+  const help = document.querySelector("#itemTypeHelp");
+
+  youtubeField.hidden = !["video", "pack"].includes(type);
+  audioField.hidden = !["audio", "pack"].includes(type);
+  bookField.hidden = !["book", "pack"].includes(type);
+  bodyField.hidden = !["book", "thought", "pack"].includes(type);
+  previewOptions.hidden = !["video", "audio", "pack"].includes(type);
+
+  const helpMessages = {
+    video: "Pega un enlace de YouTube. El video se reproducira directamente dentro de la web.",
+    audio: "Sube el archivo de audio que escucharan las alumnas.",
+    book: "Sube un PDF o EPUB y anade, si quieres, una introduccion.",
+    thought: "Escribe el pensamiento completo. No necesita ningun archivo.",
+    pack: "El pack reune un video de YouTube, un audio y un libro en una sola compra."
+  };
+  help.textContent = helpMessages[type] || "";
+
+  if (syncCategory && ["book", "thought"].includes(type)) categoryInput.value = "Sobre mi";
+  if (syncCategory && !["book", "thought"].includes(type) && categoryInput.value === "Sobre mi") {
+    categoryInput.value = "Yoga";
+  }
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 }
 
 function resetContentEditor() {
@@ -1151,6 +1386,9 @@ function resetContentEditor() {
   contentFormTitle.textContent = "Subir contenido";
   contentSubmitButton.textContent = "Guardar contenido";
   cancelEditButton.hidden = true;
+  document.querySelector("#itemAudioStatus").textContent = "MP3, M4A, WAV u otro formato de audio.";
+  document.querySelector("#itemBookStatus").textContent = "PDF o EPUB.";
+  updateContentTypeFields();
 }
 
 function editContentItem(item) {
@@ -1158,8 +1396,14 @@ function editContentItem(item) {
 
   editingItemId = item.id;
   contentForm.reset();
+  const assets = normalizeItemAssets(item);
+  const videoAsset = assets.find((asset) => asset.type === "video");
+  const audioAsset = assets.find((asset) => asset.type === "audio");
+  const bookAsset = assets.find((asset) => asset.type === "document");
+
   document.querySelector("#itemTitle").value = item.title || "";
   document.querySelector("#itemDescription").value = item.description || "";
+  document.querySelector("#itemBody").value = item.body || "";
   document.querySelector("#itemType").value = item.type || "video";
   document.querySelector("#itemVideoSource").value = item.youtubeUrl ? "youtube" : "file";
   document.querySelector("#itemYoutubeUrl").value = item.youtubeUrl || "";
@@ -1170,7 +1414,22 @@ function editContentItem(item) {
   document.querySelector("#itemPremium").checked = Boolean(item.premium);
   document.querySelector("#itemPreview").checked = Boolean(item.previewEnabled);
   document.querySelector("#itemPreviewDuration").value = item.previewDuration || "";
+<<<<<<< HEAD
   updateVideoSourceFields();
+=======
+  document.querySelector("#itemYoutubeUrl").value = youtubeVideoId(videoAsset?.url) ? videoAsset.url : "";
+  document.querySelector("#itemAudioStatus").textContent = audioAsset
+    ? `Audio actual: ${audioAsset.fileName}. Selecciona otro para sustituirlo.`
+    : "MP3, M4A, WAV u otro formato de audio.";
+  document.querySelector("#itemBookStatus").textContent = bookAsset
+    ? `Libro actual: ${bookAsset.fileName}. Selecciona otro para sustituirlo.`
+    : "PDF o EPUB.";
+
+  updateContentTypeFields();
+  if (videoAsset?.url && !youtubeVideoId(videoAsset.url)) {
+    document.querySelector("#itemTypeHelp").textContent += " El video MP4 actual se conservara mientras no pegues un enlace nuevo.";
+  }
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   contentFormTitle.textContent = `Editar: ${item.title}`;
   contentSubmitButton.textContent = "Guardar cambios";
   cancelEditButton.hidden = false;
@@ -1178,7 +1437,6 @@ function editContentItem(item) {
   contentForm.scrollIntoView({ behavior: "smooth", block: "start" });
   document.querySelector("#itemTitle").focus({ preventScroll: true });
 }
-
 function renderUserRows() {
   userRows.innerHTML = state.users.map((user) => `
     <tr>
@@ -1647,13 +1905,19 @@ function previewLimitInSeconds(value) {
   return Math.round((hours * 3600) + (minutes * 60) + seconds);
 }
 
-function openMediaViewer(item, preview = false) {
-  const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
-  if (!mediaUrl) {
-    notify("El archivo no esta disponible. La profesora debe volver a subir este contenido.");
-    return;
+function createPlayableMedia(asset, item, previewLimit = 0) {
+  const embedUrl = asset.type === "video" ? youtubeEmbedUrl(asset.url, previewLimit) : "";
+  if (embedUrl) {
+    const iframe = document.createElement("iframe");
+    iframe.className = "dialog-media youtube-dialog-player";
+    iframe.src = embedUrl;
+    iframe.title = item.title;
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    return iframe;
   }
 
+<<<<<<< HEAD
   const restrictedPreview = preview && item.premium && !canOpen(item);
   const youtubeVideoId = item.type === "video"
     ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
@@ -1674,31 +1938,150 @@ function openMediaViewer(item, preview = false) {
     media.preload = "metadata";
     media.src = mediaUrl;
     if (item.type === "video") media.playsInline = true;
+=======
+  const media = document.createElement(asset.type === "video" ? "video" : "audio");
+  media.className = "dialog-media";
+  media.controls = true;
+  media.preload = "metadata";
+  media.src = asset.url;
+  if (asset.type === "video") media.playsInline = true;
+
+  if (previewLimit > 0) {
+    media.addEventListener("timeupdate", () => {
+      if (media.currentTime < previewLimit) return;
+      media.pause();
+      media.currentTime = 0;
+      notify("Has llegado al final del trailer.");
+    });
+  }
+
+  return media;
+}
+
+function appendDocumentViewer(container, asset) {
+  const documentBlock = document.createElement("section");
+  documentBlock.className = "pack-resource document-resource";
+  const heading = document.createElement("h3");
+  heading.textContent = asset.fileName || "Libro";
+  documentBlock.append(heading);
+
+  const isPdf = asset.mimeType === "application/pdf" || asset.url.toLowerCase().includes(".pdf");
+  if (isPdf) {
+    const frame = document.createElement("iframe");
+    frame.className = "document-viewer";
+    frame.src = asset.url;
+    frame.title = asset.fileName || "Libro";
+    documentBlock.append(frame);
+  }
+
+  const link = document.createElement("a");
+  link.className = "primary-button document-link";
+  link.href = asset.url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = isPdf ? "Abrir libro en otra pestana" : "Abrir o descargar libro";
+  documentBlock.append(link);
+  container.append(documentBlock);
+}
+
+function openMediaViewer(item, preview = false) {
+  const assets = normalizeItemAssets(item);
+  const fallbackUrl = mediaUrls.get(item.id);
+  if (fallbackUrl && assets.length === 0) {
+    assets.push({
+      type: item.type === "book" ? "document" : item.type,
+      url: fallbackUrl,
+      fileName: item.fileName || "Contenido",
+      mimeType: ""
+    });
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   }
 
   mediaDialogTitle.textContent = restrictedPreview ? `Trailer: ${item.title}` : item.title;
   mediaDialogBody.replaceChildren();
 
+<<<<<<< HEAD
   if (restrictedPreview) {
     const limit = previewLimitInSeconds(item.previewDuration);
+=======
+  const previewLimit = preview ? previewLimitInSeconds(item.previewDuration) : 0;
+  if (preview) {
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     const note = document.createElement("p");
     note.className = "media-preview-note";
     note.textContent = `Vista previa disponible: ${item.previewDuration || "duracion limitada"}.`;
     mediaDialogBody.append(note);
+  }
 
+<<<<<<< HEAD
     if (limit > 0 && !youtubeVideoId) {
       media.addEventListener("timeupdate", () => {
         if (media.currentTime < limit) return;
         media.pause();
         media.currentTime = 0;
         notify("Has llegado al final del trailer.");
+=======
+  if (!preview && item.type === "thought") {
+    const body = document.createElement("div");
+    body.className = "thought-body";
+    String(item.body || item.description || "")
+      .split(/\n{2,}/)
+      .filter(Boolean)
+      .forEach((paragraph) => {
+        const text = document.createElement("p");
+        text.textContent = paragraph;
+        body.append(text);
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
       });
+    mediaDialogBody.append(body);
+  } else if (preview) {
+    const previewAsset = assets.find((asset) => ["video", "audio"].includes(asset.type));
+    if (!previewAsset?.url) {
+      notify("Este contenido no tiene un trailer reproducible.");
+      return;
+    }
+    mediaDialogBody.append(createPlayableMedia(previewAsset, item, previewLimit));
+  } else {
+    const availableAssets = assets.filter((asset) => asset.url);
+    if (availableAssets.length === 0) {
+      notify("El contenido no esta disponible. La profesora debe revisarlo.");
+      return;
+    }
+
+    availableAssets.forEach((asset) => {
+      if (asset.type === "document") {
+        appendDocumentViewer(mediaDialogBody, asset);
+        return;
+      }
+
+      const block = document.createElement("section");
+      block.className = "pack-resource";
+      if (availableAssets.length > 1) {
+        const heading = document.createElement("h3");
+        heading.textContent = asset.type === "video" ? "Video del pack" : "Audio del pack";
+        block.append(heading);
+      }
+      block.append(createPlayableMedia(asset, item));
+      mediaDialogBody.append(block);
+    });
+
+    if (item.body) {
+      const note = document.createElement("div");
+      note.className = "thought-body pack-note";
+      const paragraph = document.createElement("p");
+      paragraph.textContent = item.body;
+      note.append(paragraph);
+      mediaDialogBody.prepend(note);
     }
   }
 
-  mediaDialogBody.append(media);
   mediaDialog.showModal();
+<<<<<<< HEAD
   if (!youtubeVideoId) media.play().catch(() => {});
+=======
+  const firstPlayable = mediaDialogBody.querySelector("audio, video");
+  firstPlayable?.play().catch(() => {});
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 }
 
 function closeMediaViewer() {
@@ -1706,6 +2089,7 @@ function closeMediaViewer() {
 }
 
 function clearMediaViewer() {
+<<<<<<< HEAD
   const media = mediaDialogBody.querySelector("audio, video, iframe");
   if (media) {
     if (media instanceof HTMLIFrameElement) {
@@ -1716,9 +2100,18 @@ function clearMediaViewer() {
       media.load();
     }
   }
+=======
+  mediaDialogBody.querySelectorAll("audio, video").forEach((media) => {
+    media.pause();
+    media.removeAttribute("src");
+    media.load();
+  });
+  mediaDialogBody.querySelectorAll("iframe").forEach((frame) => {
+    frame.src = "about:blank";
+  });
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   mediaDialogBody.replaceChildren();
 }
-
 function updateHeader() {
   const user = currentUser();
   loginButton.textContent = user ? user.role === "teacher" ? "Profesora" : user.name || user.email : "Iniciar sesion";
@@ -1957,15 +2350,24 @@ authForm.addEventListener("submit", (event) => {
   });
 });
 
-document.querySelector("#itemFile").addEventListener("change", async (event) => {
+document.querySelector("#itemType").addEventListener("change", () => updateContentTypeFields(true));
+
+document.querySelector("#itemAudioFile").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   const duration = await readMediaDuration(file);
   if (!duration) return;
 
   document.querySelector("#itemDuration").value = duration;
+  document.querySelector("#itemAudioStatus").textContent = `Audio seleccionado: ${file.name}.`;
   notify(`Duracion detectada: ${duration}.`);
 });
 
+document.querySelector("#itemBookFile").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  document.querySelector("#itemBookStatus").textContent = file
+    ? `Libro seleccionado: ${file.name}.`
+    : "PDF o EPUB.";
+});
 cancelEditButton.addEventListener("click", () => {
   resetContentEditor();
   notify("Edicion cancelada.");
@@ -2131,10 +2533,13 @@ profileForm.addEventListener("submit", (event) => {
 
 contentForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const fileInput = document.querySelector("#itemFile");
-  const file = fileInput.files[0];
   const titleInput = document.querySelector("#itemTitle");
   const rawTitle = titleInput.value.trim();
+  const type = document.querySelector("#itemType").value;
+  const body = document.querySelector("#itemBody").value.trim();
+  const youtubeUrl = document.querySelector("#itemYoutubeUrl").value.trim();
+  const audioFile = document.querySelector("#itemAudioFile").files[0] || null;
+  const bookFile = document.querySelector("#itemBookFile").files[0] || null;
   const premiumInput = document.querySelector("#itemPremium");
   const priceInput = document.querySelector("#itemPrice");
   const type = document.querySelector("#itemType").value;
@@ -2143,6 +2548,16 @@ contentForm.addEventListener("submit", async (event) => {
   const previewEnabled = document.querySelector("#itemPreview").checked;
   const previewDuration = document.querySelector("#itemPreviewDuration").value || "2 min";
   const price = Number(priceInput.value || 0);
+  const existingItem = editingItemId
+    ? state.items.find((entry) => entry.id === editingItemId)
+    : null;
+  const existingAssets = normalizeItemAssets(existingItem);
+  const hasExistingVideo = existingAssets.some((asset) => asset.type === "video");
+  const hasExistingAudio = existingAssets.some((asset) => asset.type === "audio");
+  const hasExistingBook = existingAssets.some((asset) => asset.type === "document");
+  const hasVideo = Boolean(youtubeVideoId(youtubeUrl)) || (!youtubeUrl && hasExistingVideo);
+  const hasAudio = Boolean(audioFile) || hasExistingAudio;
+  const hasBook = Boolean(bookFile) || hasExistingBook;
 
   if (!rawTitle) {
     notify("El titulo es obligatorio para guardar contenido.");
@@ -2151,12 +2566,18 @@ contentForm.addEventListener("submit", async (event) => {
     return;
   }
 
+<<<<<<< HEAD
   if (isYouTube && !getYouTubeVideoId(youtubeUrl)) {
     notify("Introduce un enlace valido de YouTube (youtube.com o youtu.be).");
+=======
+  if (youtubeUrl && !youtubeVideoId(youtubeUrl)) {
+    notify("Pega un enlace valido de YouTube.");
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     document.querySelector("#itemYoutubeUrl").focus();
     return;
   }
 
+<<<<<<< HEAD
   if (isYouTube && file) {
     notify("Elige un enlace de YouTube o un archivo, no ambos.");
     fileInput.focus();
@@ -2166,16 +2587,45 @@ contentForm.addEventListener("submit", async (event) => {
   if (isYouTube && premiumInput.checked && previewEnabled && previewLimitInSeconds(previewDuration) <= 0) {
     notify("Indica una duracion de trailer valida para el video de YouTube.");
     document.querySelector("#itemPreviewDuration").focus();
+=======
+  if (type === "video" && !hasVideo) {
+    notify("Pega el enlace de YouTube del video.");
+    document.querySelector("#itemYoutubeUrl").focus();
+    return;
+  }
+
+  if (type === "audio" && !hasAudio) {
+    notify("Selecciona el archivo de audio.");
+    document.querySelector("#itemAudioFile").focus();
+    return;
+  }
+
+  if (type === "book" && !hasBook) {
+    notify("Selecciona el PDF o EPUB del libro.");
+    document.querySelector("#itemBookFile").focus();
+    return;
+  }
+
+  if (type === "thought" && !body) {
+    notify("Escribe el pensamiento antes de publicarlo.");
+    document.querySelector("#itemBody").focus();
+    return;
+  }
+
+  if (type === "pack" && (!hasVideo || !hasAudio || !hasBook)) {
+    notify("El pack necesita un video de YouTube, un audio y un libro.");
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     return;
   }
 
   if (premiumInput.checked && price <= 0) {
-    notify("Añade un precio individual mayor que 0 para publicar contenido premium.");
+    notify("Anade un precio individual mayor que 0 para publicar contenido premium.");
     priceInput.focus();
     priceInput.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
+<<<<<<< HEAD
   const existingItem = editingItemId
     ? state.items.find((entry) => entry.id === editingItemId)
     : null;
@@ -2184,21 +2634,34 @@ contentForm.addEventListener("submit", async (event) => {
     fileInput.focus();
     return;
   }
+=======
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   let item = {
     ...existingItem,
     id: existingItem?.id || `item-${Date.now()}`,
     title: rawTitle,
+<<<<<<< HEAD
     description: document.querySelector("#itemDescription").value,
     type,
     youtubeUrl: isYouTube ? youtubeUrl : "",
+=======
+    description: document.querySelector("#itemDescription").value.trim(),
+    body,
+    type,
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
-    duration: document.querySelector("#itemDuration").value || "Sin duracion",
+    duration: document.querySelector("#itemDuration").value.trim() || (["book", "thought"].includes(type) ? "Lectura libre" : "Sin duracion"),
     price,
     premium: premiumInput.checked,
+<<<<<<< HEAD
     previewEnabled,
     previewDuration,
     fileName: isYouTube ? "YouTube" : file?.name || existingItem?.fileName || "archivo-local-demo"
+=======
+    previewEnabled: document.querySelector("#itemPreview").checked && ["video", "audio", "pack"].includes(type),
+    previewDuration: document.querySelector("#itemPreviewDuration").value.trim() || "2 min"
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
   };
 
   const wasEditing = Boolean(existingItem);
@@ -2206,6 +2669,7 @@ contentForm.addEventListener("submit", async (event) => {
   contentSubmitButton.textContent = "Guardando...";
 
   try {
+<<<<<<< HEAD
     let fileForUpload = file;
     if (!fileForUpload && !item.youtubeUrl && existingItem?.hasStoredMedia && !existingItem.databaseId) {
       const storedRecord = await getStoredMedia(existingItem.id);
@@ -2218,12 +2682,14 @@ contentForm.addEventListener("submit", async (event) => {
       }
     }
 
+=======
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
     const previousItemId = item.id;
-    item = await saveContentToDatabase(item, fileForUpload);
+    item = await saveContentToDatabase(item, { youtubeUrl, audioFile, bookFile });
 
     if (wasEditing) {
       const itemIndex = state.items.findIndex((entry) => entry.id === previousItemId);
-      state.items[itemIndex] = item;
+      if (itemIndex >= 0) state.items[itemIndex] = item;
     } else {
       state.items.unshift(item);
     }
@@ -2239,15 +2705,16 @@ contentForm.addEventListener("submit", async (event) => {
     resetContentEditor();
     renderDashboard();
     renderPublicContent();
-    notify(wasEditing ? "Contenido actualizado en Supabase." : fileForUpload ? "Contenido y archivo guardados en Supabase." : "Contenido guardado en Supabase sin archivo multimedia.");
+    notify(wasEditing ? "Contenido actualizado en Supabase." : "Contenido publicado en Supabase.");
   } catch (error) {
     console.error("Could not save content in Supabase:", error);
     notify(`No se pudo guardar en Supabase: ${error.message || "revisa la consulta y los permisos"}`);
   } finally {
     contentSubmitButton.disabled = false;
-    contentSubmitButton.textContent = wasEditing && editingItemId ? "Guardar cambios" : "Guardar contenido";
+    contentSubmitButton.textContent = editingItemId ? "Guardar cambios" : "Guardar contenido";
   }
 });
+<<<<<<< HEAD
 
 document.querySelector("#itemType").addEventListener("change", () => {
   if (document.querySelector("#itemType").value !== "video") {
@@ -2264,6 +2731,8 @@ document.querySelector("#itemVideoSource").addEventListener("change", () => {
   }
   updateVideoSourceFields();
 });
+=======
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 typeFilter.addEventListener("change", renderPublicContent);
 categoryFilter.addEventListener("change", renderPublicContent);
 
@@ -2273,7 +2742,11 @@ updateHeader();
 renderSiteContent();
 showTeacherSlide(0);
 renderPublicContent();
+<<<<<<< HEAD
 loadSubscriptionPlans();
+=======
+updateContentTypeFields();
+>>>>>>> e8df5503bcf665518990ad2ccdb637b977b90674
 routeFromHash();
 processCheckoutReturn();
 restoreStoredMedia().then(syncContentFromDatabase);
