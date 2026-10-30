@@ -21,7 +21,7 @@ STRIPE_PREMIUM_PRICE_ID=price_...
 NEXT_PUBLIC_SUPABASE_URL=https://...supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
-SITE_URL=https://tu-dominio.vercel.app
+SITE_URL=https://resetdeconciencia.com
 ```
 
 También se aceptan los nombres antiguos `NEXT_PUBLIC_SUPABASE_ANON_KEY` y
@@ -33,7 +33,7 @@ También se aceptan los nombres antiguos `NEXT_PUBLIC_SUPABASE_ANON_KEY` y
 2. En Stripe, crea un endpoint webhook con esta URL:
 
 ```text
-https://tu-dominio.vercel.app/api/stripe-webhook
+https://resetdeconciencia.com/api/stripe-webhook
 ```
 
 3. Selecciona estos eventos:

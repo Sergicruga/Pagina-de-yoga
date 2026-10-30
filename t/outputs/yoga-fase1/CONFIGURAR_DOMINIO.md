@@ -1,44 +1,60 @@
-# Conectar el dominio a Vercel
+# Conectar resetdeconciencia.com a Vercel
 
-## Datos que faltan
+## Configuracion elegida
 
-Antes de hacer el cambio definitivo hay que confirmar:
+- Dominio principal: `https://resetdeconciencia.com`
+- Redireccion: `https://www.resetdeconciencia.com` hacia el dominio principal
+- Proyecto de Vercel: `pagina-de-yoga`
+- Proveedor DNS detectado: OVH
 
-- El dominio exacto, por ejemplo `resetdeconciencia.es`.
-- La empresa donde se compro el dominio.
-- Si la direccion principal sera con `www` o sin `www`.
+Estado comprobado el 30 de octubre de 2026:
 
-## 1. Anadir el dominio al proyecto
+- Los nameservers son `dns103.ovh.net` y `ns103.ovh.net`.
+- El dominio raiz apunta al aparcamiento de OVH: `213.186.33.5`.
+- `www` todavia no tiene un CNAME configurado.
 
-1. Abre el proyecto `pagina-de-yoga` en Vercel.
+## 1. Anadir los dominios en Vercel
+
+1. Abre el proyecto `pagina-de-yoga`.
 2. Entra en **Settings > Domains**.
-3. Anade el dominio sin `www`.
-4. Anade tambien la version con `www`.
-5. Elige una como principal y configura la otra para redirigir a ella.
+3. Anade `resetdeconciencia.com`.
+4. Anade `www.resetdeconciencia.com`.
+5. Configura `www` para redirigir permanentemente a `resetdeconciencia.com`.
 
-Vercel mostrara los registros DNS exactos que necesita ese dominio. Deben copiarse en el panel de la empresa donde se compro. Como referencia, un dominio raiz suele utilizar un registro `A` y `www` suele utilizar un `CNAME`, pero hay que usar los valores que muestre Vercel para este proyecto.
+Vercel mostrara los registros DNS exactos necesarios. Hay que utilizar esos valores, ya que el CNAME puede ser especifico del proyecto.
 
 Documentacion oficial: https://vercel.com/docs/domains/set-up-custom-domain
 
-## 2. Actualizar la direccion usada por los pagos
+## 2. Cambiar la zona DNS en OVH
 
-En **Vercel > Settings > Environment Variables**, cambia:
+Entra en **OVHcloud Manager > Web Cloud > Dominios > resetdeconciencia.com > Zona DNS**.
+
+1. Edita o elimina unicamente el registro `A` del dominio raiz que apunta a `213.186.33.5`.
+2. Crea el registro `A` para `@` con el valor que muestre Vercel. El valor general de Vercel suele ser `76.76.21.21`, pero manda el valor mostrado en el proyecto.
+3. Crea un registro `CNAME` con subdominio `www` y el destino que muestre Vercel. Puede ser `cname.vercel-dns-0.com` o un destino especifico.
+4. No elimines registros MX, SPF, DKIM, TXT ni otros registros relacionados con correo.
+
+La propagacion puede tardar desde unos minutos hasta 24 horas. Vercel emitira automaticamente el certificado HTTPS cuando valide los DNS.
+
+## 3. Actualizar Vercel
+
+En **Settings > Environment Variables**, configura:
 
 ```text
-SITE_URL=https://DOMINIO-ELEGIDO
+SITE_URL=https://resetdeconciencia.com
 ```
 
-No anadas una barra al final. Aplica la variable a `Production` y vuelve a desplegar la web.
+Aplica la variable a `Production` y realiza un nuevo despliegue.
 
-## 3. Actualizar el webhook de Stripe
+## 4. Actualizar Stripe
 
-En Stripe, crea o actualiza el endpoint del entorno correspondiente:
+Crea o actualiza el endpoint webhook con esta URL:
 
 ```text
-https://DOMINIO-ELEGIDO/api/stripe-webhook
+https://resetdeconciencia.com/api/stripe-webhook
 ```
 
-Eventos utilizados por la web:
+Eventos utilizados:
 
 ```text
 checkout.session.completed
@@ -48,7 +64,7 @@ invoice.paid
 invoice.payment_failed
 ```
 
-Copia el nuevo secreto de firma del endpoint, que empieza por `whsec_`, y guardalo en Vercel como:
+Copia el nuevo secreto de firma del endpoint, que empieza por `whsec_`, y guardalo en Vercel:
 
 ```text
 STRIPE_WEBHOOK_SECRET=whsec_...
@@ -56,17 +72,15 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 El secreto del webhook es distinto de `STRIPE_SECRET_KEY`. Despues hay que volver a desplegar.
 
-Documentacion oficial: https://docs.stripe.com/keys
+## 5. Comprobaciones
 
-## 4. Comprobaciones finales
-
-- Abrir el dominio con y sin `www` y comprobar que una direccion redirige a la principal.
-- Confirmar que aparece el candado HTTPS.
-- Registrar una cuenta de prueba.
-- Probar una compra con Stripe en modo de prueba.
-- Confirmar que el pago concede acceso en Supabase.
-- Revisar que `SITE_URL`, las claves de Stripe y el webhook pertenecen todos al mismo entorno: prueba o real.
+- `https://resetdeconciencia.com` abre la web.
+- `https://www.resetdeconciencia.com` redirige a la direccion principal.
+- El navegador muestra HTTPS sin errores.
+- Una compra de prueba vuelve al nuevo dominio.
+- El webhook de Stripe aparece como entregado.
+- El pago concede acceso en Supabase.
 
 ## Antes de cobrar pagos reales
 
-La web aun utiliza el acceso provisional de demostracion. Antes de activar claves `sk_live_` hay que migrar el registro e inicio de sesion a Supabase Auth y aplicar politicas RLS privadas. No se deben activar pagos reales con contrasenas guardadas en la tabla `users`.
+La web aun utiliza el acceso provisional de demostracion. Antes de activar claves `sk_live_` hay que migrar el registro e inicio de sesion a Supabase Auth y aplicar politicas RLS privadas.
