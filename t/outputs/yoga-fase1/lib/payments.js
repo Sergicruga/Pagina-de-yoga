@@ -149,7 +149,9 @@ export async function updateSubscription(database, subscription) {
     userId: user.id,
     email: user.email,
     premium: premiumActive,
-    subscriptionStatus
+    subscriptionStatus,
+    stripeCustomerId: customerId,
+    premiumUntil: subscriptionPeriodEnd(subscription)
   };
 }
 

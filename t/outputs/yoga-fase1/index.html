@@ -19,6 +19,7 @@
         <a href="#inicio" data-route="inicio">Inicio</a>
         <a href="#clases" data-route="clases">Clases</a>
         <a href="#contenido" data-route="contenido">Contenido</a>
+        <a href="#suscripcion" data-route="suscripcion">Suscripcion</a>
         <a href="#contacto" data-route="contacto">Contacto</a>
       </nav>
       <div class="header-actions">
@@ -225,6 +226,17 @@
         <div class="content-grid" id="contentGrid"></div>
       </section>
 
+      <section class="view content-band subscription-page" id="view-suscripcion" data-view="suscripcion" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Reset Premium</p>
+          <h2>Elige tu plan</h2>
+          <p>Acceso completo a todos los videos y audios premium mientras tu suscripcion este activa.</p>
+        </div>
+        <p class="subscription-notice">Los planes se renuevan automaticamente cada periodo. Puedes cancelar la renovacion desde tu espacio.</p>
+        <p class="subscription-status-message" id="publicSubscriptionMessage" aria-live="polite">Cargando planes...</p>
+        <div class="subscription-plans" id="publicSubscriptionPlans"></div>
+      </section>
+
       <section class="view content-band" id="view-contacto" data-view="contacto" hidden>
         <div class="section-heading">
           <p class="eyebrow">Contacto</p>
@@ -243,6 +255,7 @@
           <h2 id="sidebarTitle">Mi espacio</h2>
           <button type="button" class="side-link active" data-panel="library">Biblioteca</button>
           <button type="button" class="side-link student-only" data-panel="profile">Perfil</button>
+          <button type="button" class="side-link student-only" data-panel="subscription">Suscripcion</button>
           <button type="button" class="side-link admin-only" data-panel="admin">Gestionar contenido</button>
           <button type="button" class="side-link admin-only" data-panel="site">Editar web</button>
           <button type="button" class="side-link admin-only" data-panel="users">Usuarios</button>
@@ -277,6 +290,17 @@
             </div>
           </div>
 
+          <div class="panel-view student-only" id="panel-subscription" hidden>
+            <div class="soft-panel subscription-dashboard">
+              <p class="eyebrow">Reset Premium</p>
+              <h3 id="subscriptionPanelTitle">Accede a todo el contenido</h3>
+              <p id="subscriptionPanelDescription">Elige un periodo y disfruta de todos los videos y audios premium mientras tu plan este activo.</p>
+              <button class="secondary-button" id="manageSubscriptionButton" type="button" hidden>Gestionar o cancelar suscripcion</button>
+              <p class="subscription-status-message" id="dashboardSubscriptionMessage" aria-live="polite">Cargando planes...</p>
+              <div class="subscription-plans" id="dashboardSubscriptionPlans"></div>
+            </div>
+          </div>
+
           <div class="panel-view" id="panel-admin" hidden>
             <form class="admin-form" id="contentForm" novalidate>
               <h3 id="contentFormTitle">Subir contenido</h3>
@@ -307,7 +331,17 @@
                 <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
                 <label>Precio individual (obligatorio si es premium)<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
               </div>
-              <label>Archivo de prueba<input id="itemFile" type="file" accept="audio/*,video/*"></label>
+              <label id="itemVideoSourceField">Origen del video
+                <select id="itemVideoSource">
+                  <option value="file">Archivo</option>
+                  <option value="youtube">YouTube</option>
+                </select>
+              </label>
+              <label id="itemYoutubeUrlField" hidden>Enlace de YouTube
+                <input id="itemYoutubeUrl" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="url">
+              </label>
+              <p class="form-help" id="itemYoutubeHelp" hidden>Los videos deben permitir la insercion. El acceso Premium de esta web no sustituye una membresia de YouTube; los videos publicos o no listados pueden seguir siendo accesibles desde su enlace original.</p>
+              <label id="itemFileField">Archivo multimedia<input id="itemFile" type="file" accept="audio/*,video/*"></label>
               <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>
               <div class="preview-options">
                 <label class="check-row"><input id="itemPreview" type="checkbox"> Permitir trailer para todos</label>
@@ -421,6 +455,7 @@
         <label>Contraseña<input id="passwordInput" type="password" autocomplete="current-password" placeholder="Tu contraseña"></label>
         <p class="auth-note" id="authNote">Demo: usa profesora@demo.com para entrar como profesora.</p>
         <button class="primary-button" id="authSubmitButton" type="submit">Entrar</button>
+        <button class="auth-mode-toggle" id="authModeToggle" type="button">Crear una cuenta nueva</button>
       </form>
     </dialog>
 

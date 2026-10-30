@@ -31,6 +31,8 @@ export default {
         email: result.email || session.metadata?.userEmail || session.customer_details?.email || null,
         lessonId: result.lessonId || session.metadata?.lessonId || null,
         subscriptionStatus: result.subscriptionStatus || null,
+        stripeCustomerId: result.stripeCustomerId || null,
+        premiumUntil: result.premiumUntil || null,
         paymentStatus: session.payment_status,
         checkoutStatus: session.status
       });

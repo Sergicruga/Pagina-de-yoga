@@ -175,6 +175,7 @@ const profileForm = document.querySelector("#profileForm");
 const adminRows = document.querySelector("#adminContentRows");
 const userRows = document.querySelector("#userRows");
 const toast = document.querySelector("#toast");
+const authModeToggle = document.querySelector("#authModeToggle");
 const mediaDialog = document.querySelector("#mediaDialog");
 const mediaDialogTitle = document.querySelector("#mediaDialogTitle");
 const mediaDialogBody = document.querySelector("#mediaDialogBody");
@@ -197,6 +198,15 @@ const teacherPhotoLabel = document.querySelector("#teacherPhotoLabel");
 const siteTeacherPhotoInput = document.querySelector("#siteTeacherPhoto");
 const siteTeacherPhotoPreview = document.querySelector("#siteTeacherPhotoPreview");
 const resetTeacherPhotoButton = document.querySelector("#resetTeacherPhotoButton");
+const subscriptionPlanContainers = [
+  document.querySelector("#publicSubscriptionPlans"),
+  document.querySelector("#dashboardSubscriptionPlans")
+];
+const subscriptionPlanMessages = [
+  document.querySelector("#publicSubscriptionMessage"),
+  document.querySelector("#dashboardSubscriptionMessage")
+];
+const manageSubscriptionButton = document.querySelector("#manageSubscriptionButton");
 let authMode = "login";
 const mediaUrls = new Map();
 const mediaDatabaseName = "luma-yoga-media";
@@ -207,6 +217,9 @@ let pendingPanel = null;
 let editingItemId = null;
 let currentTeacherSlide = 0;
 let pendingSitePhotoPreviewUrl = null;
+let pendingSubscriptionPlan = null;
+let loadedSubscriptionPlans = [];
+let subscriptionPlansError = "";
 
 function loadState() {
   const saved = localStorage.getItem(storageKey);
@@ -284,11 +297,12 @@ function currentUser() {
   return state.users.find((user) => user.email === state.session.email) || null;
 }
 
-function rememberCheckout(user, purchaseType, item) {
+function rememberCheckout(user, purchaseType, item, subscriptionPlanId = null) {
   sessionStorage.setItem(checkoutStorageKey, JSON.stringify({
     email: user.email,
     purchaseType,
-    lessonId: item?.databaseId || null
+    lessonId: item?.databaseId || null,
+    subscriptionPlanId
   }));
 }
 
@@ -305,9 +319,12 @@ function clearPendingCheckout() {
   sessionStorage.removeItem(checkoutStorageKey);
 }
 
-async function startStripeCheckout(purchaseType, item, button) {
+async function startStripeCheckout(purchaseType, item, button, subscriptionPlanId = null) {
   const user = currentUser();
   if (!user) {
+    if (purchaseType === "subscription" && subscriptionPlanId) {
+      pendingSubscriptionPlan = { planId: subscriptionPlanId, button };
+    }
     openAuthDialog("login");
     notify(purchaseType === "lesson"
       ? "Inicia sesion para comprar este contenido."
@@ -336,13 +353,14 @@ async function startStripeCheckout(purchaseType, item, button) {
   button.textContent = "Abriendo pago...";
 
   try {
-    rememberCheckout(user, purchaseType, item);
+    rememberCheckout(user, purchaseType, item, subscriptionPlanId);
     const response = await fetch("/api/create-checkout-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         purchaseType,
         lessonId: item?.databaseId || null,
+        subscriptionPlanId,
         userId: user.id || null,
         email: user.email
       })
@@ -410,7 +428,10 @@ async function processCheckoutReturn() {
       state.session = { email: user.email };
       if (result.purchaseType === "subscription") {
         user.premium = true;
-      } else if (result.purchaseType === "lesson" && result.lessonId) {
+        user.subscriptionStatus = result.subscriptionStatus || "active";
+      user.premiumUntil = result.premiumUntil || null;
+      user.stripeCustomerId = result.stripeCustomerId || user.stripeCustomerId || null;
+    } else if (result.purchaseType === "lesson" && result.lessonId) {
         user.purchases = user.purchases || [];
         const itemId = databaseItemId(result.lessonId);
         if (!user.purchases.includes(itemId)) user.purchases.push(itemId);
@@ -460,6 +481,37 @@ function safeStorageFileName(fileName) {
   return normalizedName || "archivo";
 }
 
+function getYouTubeVideoId(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return null;
+
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    let videoId = null;
+    if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0];
+    } else if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
+      if (url.pathname === "/watch") {
+        videoId = url.searchParams.get("v");
+      } else {
+        videoId = url.pathname.match(/^\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})(?:\/|$)/)?.[1] || null;
+      }
+    }
+
+    return /^[A-Za-z0-9_-]{11}$/.test(videoId || "") ? videoId : null;
+  } catch {
+    return null;
+  }
+}
+
+function youtubeEmbedUrl(videoId, previewDuration = 0) {
+  const url = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`);
+  url.searchParams.set("playsinline", "1");
+  url.searchParams.set("rel", "0");
+  if (previewDuration > 0) url.searchParams.set("end", String(previewDuration));
+  return url.toString();
+}
+
 function itemFromDatabase(row) {
   const mediaRecords = Array.isArray(row.media) ? row.media : [];
   const media = [...mediaRecords]
@@ -484,6 +536,7 @@ function itemFromDatabase(row) {
     previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
     fileName: media?.file_name || "Sin archivo",
     mediaUrl: media?.url || "",
+    youtubeUrl: media?.type === "video" && getYouTubeVideoId(media.url) ? media.url : "",
     hasStoredMedia: Boolean(media?.url)
   };
 }
@@ -661,6 +714,53 @@ async function saveContentToDatabase(item, file) {
           .remove([item.storagePath]);
         if (removeError) console.error("Could not remove previous Supabase media:", removeError);
       }
+    } else if (item.youtubeUrl) {
+      if (!getYouTubeVideoId(item.youtubeUrl)) throw new Error("El enlace de YouTube no es valido.");
+
+      const mediaPayload = {
+        lesson_id: lesson.id,
+        title: item.title,
+        type: "video",
+        url: item.youtubeUrl,
+        storage_path: null,
+        file_name: "YouTube",
+        mime_type: null,
+        file_size_bytes: null,
+        duration_seconds: previewLimitInSeconds(item.duration) || null,
+        position: 0,
+        metadata: {
+          category: item.category,
+          level: item.level,
+          premium: Boolean(item.premium),
+          provider: "youtube"
+        }
+      };
+
+      if (item.mediaId) {
+        const { data, error } = await db
+          .from("media")
+          .update(mediaPayload)
+          .eq("id", item.mediaId)
+          .select()
+          .single();
+        if (error) throw error;
+        mediaRecord = data;
+      } else {
+        const { data, error } = await db
+          .from("media")
+          .insert(mediaPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        mediaRecord = data;
+      }
+
+      if (item.storagePath) {
+        const { error: removeError } = await db.storage
+          .from(supabaseMediaBucket)
+          .remove([item.storagePath]);
+        if (removeError) console.error("Could not remove previous Supabase media:", removeError);
+      }
     }
   } catch (error) {
     if (uploadedPath) {
@@ -687,6 +787,7 @@ async function saveContentToDatabase(item, file) {
     mediaId: mediaRecord?.id || null,
     storagePath: mediaRecord?.storage_path || null,
     mediaUrl: mediaRecord?.url || "",
+    youtubeUrl: mediaRecord?.type === "video" && getYouTubeVideoId(mediaRecord.url) ? mediaRecord.url : "",
     fileName: mediaRecord?.file_name || item.fileName || "Sin archivo",
     hasStoredMedia: Boolean(mediaRecord?.url)
   };
@@ -719,6 +820,9 @@ function userFromDatabase(row) {
     passwordHash: row.password_hash || "",
     role: row.role || "user",
     premium: Boolean(row.is_premium),
+    subscriptionStatus: row.subscription_status || "inactive",
+    premiumUntil: row.premium_until || null,
+    stripeCustomerId: row.stripe_customer_id || null,
     purchases: []
   };
 }
@@ -745,7 +849,7 @@ async function syncUsersFromDatabase() {
 
     const { data, error } = await db
       .from("users")
-      .select("id,email,full_name,password_hash,role,is_premium")
+      .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -792,6 +896,10 @@ function showView(route) {
 
   if (visibleRoute === "contenido") {
     renderPublicContent();
+  }
+
+  if (visibleRoute === "suscripcion") {
+    renderSubscriptionPlans();
   }
 
   if (serviceKey) {
@@ -933,11 +1041,19 @@ function contentCard(item) {
   const boughtSingle = Boolean(user?.purchases?.includes(item.id));
   const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
   const mediaUrl = mediaUrls.get(item.id) || item.mediaUrl;
-  const media = mediaUrl && !locked
-    ? item.type === "video"
-      ? `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></video>`
-      : `<audio class="media-player" controls preload="metadata" src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></audio>`
-    : `<div class="media-thumb">${symbol}</div>`;
+  const youtubeVideoId = item.type === "video"
+    ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
+    : null;
+  const youtubePreviewDuration = previewLimitInSeconds(item.previewDuration);
+  const previewAvailable = hasPreview && (!youtubeVideoId || (locked && youtubePreviewDuration > 0));
+  const showYouTubePlayer = Boolean(youtubeVideoId && (!locked || previewAvailable));
+  const media = showYouTubePlayer
+    ? `<iframe class="media-player youtube-player" src="${escapeHtml(youtubeEmbedUrl(youtubeVideoId, locked ? youtubePreviewDuration : 0))}" title="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+    : mediaUrl && !locked
+      ? item.type === "video"
+        ? `<video class="media-player" controls preload="metadata" playsinline src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></video>`
+        : `<audio class="media-player" controls preload="metadata" src="${escapeHtml(mediaUrl)}" aria-label="${escapeHtml(item.title)}"></audio>`
+      : `<div class="media-thumb">${symbol}</div>`;
 
   return `
     <article class="content-card ${locked ? "locked" : ""}">
@@ -947,7 +1063,7 @@ function contentCard(item) {
         <span class="chip">${item.category}</span>
         <span class="chip">${item.level}</span>
         <span class="chip ${item.premium ? "premium" : ""}">${accessText}</span>
-        ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
+        ${previewAvailable ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
@@ -960,10 +1076,10 @@ function contentCard(item) {
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(item.fileName || "archivo-demo")}</p>
       <div class="card-actions">
         ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
-        ${hasPreview ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
+        ${previewAvailable ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
         ${canBuySingle ? `<button class="primary-button" type="button" data-buy-item="${item.id}">Comprar ${escapeHtml(formatPrice(item.price))}</button>` : ""}
         ${locked && item.premium && !hasIndividualPrice ? `<button class="secondary-button" type="button" data-price-pending>Compra individual: precio pendiente</button>` : ""}
-        ${locked ? `<button class="secondary-button" type="button" data-subscribe>Suscribirme</button>` : ""}
+        ${locked ? `<button class="secondary-button" type="button" data-route="suscripcion">Ver planes</button>` : ""}
       </div>
     </article>
   `;
@@ -992,6 +1108,7 @@ function renderDashboard() {
   });
 
   dashboardGrid.innerHTML = state.items.map(contentCard).join("");
+  renderSubscriptionPlans();
   renderAdminRows();
   renderUserRows();
   if (teacher) {
@@ -1018,9 +1135,19 @@ function renderAdminRows() {
   `).join("");
 }
 
+function updateVideoSourceFields() {
+  const isVideo = document.querySelector("#itemType").value === "video";
+  const isYouTube = isVideo && document.querySelector("#itemVideoSource").value === "youtube";
+  document.querySelector("#itemVideoSourceField").hidden = !isVideo;
+  document.querySelector("#itemYoutubeUrlField").hidden = !isYouTube;
+  document.querySelector("#itemYoutubeHelp").hidden = !isYouTube;
+  document.querySelector("#itemFileField").hidden = isYouTube;
+}
+
 function resetContentEditor() {
   editingItemId = null;
   contentForm.reset();
+  updateVideoSourceFields();
   contentFormTitle.textContent = "Subir contenido";
   contentSubmitButton.textContent = "Guardar contenido";
   cancelEditButton.hidden = true;
@@ -1034,6 +1161,8 @@ function editContentItem(item) {
   document.querySelector("#itemTitle").value = item.title || "";
   document.querySelector("#itemDescription").value = item.description || "";
   document.querySelector("#itemType").value = item.type || "video";
+  document.querySelector("#itemVideoSource").value = item.youtubeUrl ? "youtube" : "file";
+  document.querySelector("#itemYoutubeUrl").value = item.youtubeUrl || "";
   document.querySelector("#itemCategory").value = item.category || "Yoga";
   document.querySelector("#itemLevel").value = item.level || "Principiante";
   document.querySelector("#itemDuration").value = item.duration || "";
@@ -1041,6 +1170,7 @@ function editContentItem(item) {
   document.querySelector("#itemPremium").checked = Boolean(item.premium);
   document.querySelector("#itemPreview").checked = Boolean(item.previewEnabled);
   document.querySelector("#itemPreviewDuration").value = item.previewDuration || "";
+  updateVideoSourceFields();
   contentFormTitle.textContent = `Editar: ${item.title}`;
   contentSubmitButton.textContent = "Guardar cambios";
   cancelEditButton.hidden = false;
@@ -1131,10 +1261,10 @@ async function login(email, password) {
 
   try {
     const db = await getDatabase();
-    if (db && !user) {
+    if (db) {
       const { data: existingUser, error: findError } = await db
         .from("users")
-        .select("id,email,full_name,password_hash,role,is_premium")
+        .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
         .eq("email", normalizedEmail)
         .maybeSingle();
 
@@ -1161,7 +1291,7 @@ async function login(email, password) {
               is_premium: false,
               last_login_at: new Date().toISOString()
             })
-            .select("id,email,full_name,password_hash,role,is_premium")
+            .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
             .single();
 
           if (insertError) throw insertError;
@@ -1240,10 +1370,130 @@ async function login(email, password) {
   } else {
     showPanel(targetPanel || (isTeacher() ? "admin" : "library"));
   }
+
+  const selectedPlan = pendingSubscriptionPlan;
+  pendingSubscriptionPlan = null;
+  if (selectedPlan) {
+    await startStripeCheckout("subscription", null, selectedPlan.button, selectedPlan.planId);
+  }
 }
 
 function formatPrice(value) {
   return `${Number(value || 0).toFixed(2).replace(".", ",")} EUR`;
+}
+
+function subscriptionIsActive(user = currentUser()) {
+  return Boolean(user?.premium && ["active", "trialing"].includes(user.subscriptionStatus));
+}
+
+function renderSubscriptionPlans() {
+  const activeSubscription = subscriptionIsActive();
+  subscriptionPlanContainers.forEach((container) => {
+    if (!container) return;
+    container.innerHTML = loadedSubscriptionPlans.map((plan) => `
+      <article class="subscription-plan ${plan.available ? "" : "unavailable"}">
+        <p class="eyebrow">${escapeHtml(plan.label)}</p>
+        <h3>${plan.available ? escapeHtml(formatPrice(plan.amount / 100)) : "Precio pendiente"}</h3>
+        <p>Renovacion automatica cada ${escapeHtml(plan.label)}.</p>
+        <button class="primary-button" type="button" data-subscription-plan="${escapeHtml(plan.id)}"
+          ${!plan.available || activeSubscription ? "disabled" : ""}>
+          ${activeSubscription ? "Premium activo" : plan.available ? "Elegir plan" : "No disponible"}
+        </button>
+      </article>
+    `).join("");
+  });
+
+  subscriptionPlanMessages.forEach((message) => {
+    if (!message) return;
+    if (subscriptionPlansError) {
+      message.textContent = subscriptionPlansError;
+    } else if (activeSubscription) {
+      message.textContent = "Tu suscripcion esta activa y tienes acceso completo a todo el contenido premium.";
+    } else if (loadedSubscriptionPlans.length === 0) {
+      message.textContent = "Cargando planes...";
+    } else if (loadedSubscriptionPlans.every((plan) => !plan.available)) {
+      message.textContent = "Los planes aun no estan configurados. Vuelve pronto.";
+    } else {
+      message.textContent = currentUser()
+        ? "Elige un periodo. La renovacion se puede cancelar desde este espacio."
+        : "Elige un periodo. Inicia sesion o crea una cuenta para continuar con el pago.";
+    }
+  });
+
+  if (manageSubscriptionButton) {
+    manageSubscriptionButton.hidden = !subscriptionIsActive() || !currentUser()?.stripeCustomerId;
+  }
+}
+
+async function loadSubscriptionPlans() {
+  try {
+    const response = await fetch("/api/subscription-plans", { cache: "no-store" });
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error("No se pudieron cargar los planes de suscripcion.");
+    }
+    if (!response.ok) throw new Error(result.message || "No se pudieron cargar los planes.");
+    if (!Array.isArray(result.plans)) throw new Error("La respuesta de planes no es valida.");
+    loadedSubscriptionPlans = result.plans;
+    subscriptionPlansError = "";
+  } catch (error) {
+    console.error("Could not load subscription plans:", error);
+    subscriptionPlansError = error.message || "No se pudieron cargar los planes.";
+  }
+  renderSubscriptionPlans();
+}
+
+async function selectSubscriptionPlan(planId, button) {
+  const plan = loadedSubscriptionPlans.find((entry) => entry.id === planId && entry.available);
+  if (!plan) {
+    notify("Este plan no esta disponible ahora.");
+    return;
+  }
+  if (subscriptionIsActive()) {
+    notify("Tu suscripcion Premium ya esta activa.");
+    return;
+  }
+
+  const user = currentUser();
+  if (!user) {
+    pendingSubscriptionPlan = { planId, button };
+    openAuthDialog("login");
+    notify("Inicia sesion o crea una cuenta para continuar con la suscripcion.");
+    return;
+  }
+
+  await startStripeCheckout("subscription", null, button, planId);
+}
+
+async function openBillingPortal(button) {
+  const user = currentUser();
+  if (!user?.id || !user.stripeCustomerId) {
+    notify("No se encontro una suscripcion de Stripe para esta cuenta.");
+    return;
+  }
+
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = "Abriendo...";
+  try {
+    const response = await fetch("/api/create-billing-portal-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, email: user.email })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.url) {
+      throw new Error(result.message || "No se pudo abrir la gestion de suscripcion.");
+    }
+    window.location.assign(result.url);
+  } catch (error) {
+    console.error("Could not open Stripe billing portal:", error);
+    notify(error.message || "No se pudo abrir la gestion de suscripcion.");
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 function formatDuration(seconds) {
@@ -1404,24 +1654,39 @@ function openMediaViewer(item, preview = false) {
     return;
   }
 
-  const media = document.createElement(item.type === "video" ? "video" : "audio");
+  const restrictedPreview = preview && item.premium && !canOpen(item);
+  const youtubeVideoId = item.type === "video"
+    ? getYouTubeVideoId(item.youtubeUrl || mediaUrl)
+    : null;
+  const media = youtubeVideoId
+    ? document.createElement("iframe")
+    : document.createElement(item.type === "video" ? "video" : "audio");
   media.className = "dialog-media";
-  media.controls = true;
-  media.preload = "metadata";
-  media.src = mediaUrl;
-  if (item.type === "video") media.playsInline = true;
+  if (youtubeVideoId) {
+    const previewDuration = restrictedPreview ? previewLimitInSeconds(item.previewDuration) : 0;
+    media.src = youtubeEmbedUrl(youtubeVideoId, previewDuration);
+    media.title = item.title;
+    media.allow = "accelerometer; encrypted-media; gyroscope; picture-in-picture";
+    media.allowFullscreen = true;
+    media.referrerPolicy = "strict-origin-when-cross-origin";
+  } else {
+    media.controls = true;
+    media.preload = "metadata";
+    media.src = mediaUrl;
+    if (item.type === "video") media.playsInline = true;
+  }
 
-  mediaDialogTitle.textContent = preview ? `Trailer: ${item.title}` : item.title;
+  mediaDialogTitle.textContent = restrictedPreview ? `Trailer: ${item.title}` : item.title;
   mediaDialogBody.replaceChildren();
 
-  if (preview) {
+  if (restrictedPreview) {
     const limit = previewLimitInSeconds(item.previewDuration);
     const note = document.createElement("p");
     note.className = "media-preview-note";
     note.textContent = `Vista previa disponible: ${item.previewDuration || "duracion limitada"}.`;
     mediaDialogBody.append(note);
 
-    if (limit > 0) {
+    if (limit > 0 && !youtubeVideoId) {
       media.addEventListener("timeupdate", () => {
         if (media.currentTime < limit) return;
         media.pause();
@@ -1433,7 +1698,7 @@ function openMediaViewer(item, preview = false) {
 
   mediaDialogBody.append(media);
   mediaDialog.showModal();
-  media.play().catch(() => {});
+  if (!youtubeVideoId) media.play().catch(() => {});
 }
 
 function closeMediaViewer() {
@@ -1441,11 +1706,15 @@ function closeMediaViewer() {
 }
 
 function clearMediaViewer() {
-  const media = mediaDialogBody.querySelector("audio, video");
+  const media = mediaDialogBody.querySelector("audio, video, iframe");
   if (media) {
-    media.pause();
-    media.removeAttribute("src");
-    media.load();
+    if (media instanceof HTMLIFrameElement) {
+      media.src = "about:blank";
+    } else {
+      media.pause();
+      media.removeAttribute("src");
+      media.load();
+    }
   }
   mediaDialogBody.replaceChildren();
 }
@@ -1471,6 +1740,7 @@ function openAuthDialog(mode) {
     ? "Demo: la contraseña se guarda en la tabla users solo para pruebas."
     : "Demo: prueba alumna@demo.com o profesora@demo.com con demo123.";
   document.querySelector("#authSubmitButton").textContent = isRegister ? "Crear cuenta" : "Entrar";
+  authModeToggle.textContent = isRegister ? "Ya tengo cuenta: iniciar sesion" : "Crear una cuenta nueva";
   document.querySelectorAll(".register-only").forEach((element) => {
     element.hidden = !isRegister;
   });
@@ -1554,9 +1824,9 @@ document.body.addEventListener("click", async (event) => {
     return;
   }
 
-  const subscribeButton = event.target.closest("[data-subscribe]");
-  if (subscribeButton) {
-    await startStripeCheckout("subscription", null, subscribeButton);
+  const planButton = event.target.closest("[data-subscription-plan]");
+  if (planButton) {
+    await selectSubscriptionPlan(planButton.dataset.subscriptionPlan, planButton);
     return;
   }
 
@@ -1627,10 +1897,19 @@ loginButton.addEventListener("click", () => {
 });
 closeAuthButton.addEventListener("click", () => {
   pendingPanel = null;
+  pendingSubscriptionPlan = null;
   authDialog.close();
 });
 authDialog.addEventListener("cancel", () => {
   pendingPanel = null;
+  pendingSubscriptionPlan = null;
+});
+authModeToggle.addEventListener("click", () => {
+  const email = document.querySelector("#emailInput").value;
+  const name = document.querySelector("#nameInput").value;
+  openAuthDialog(authMode === "register" ? "login" : "register");
+  document.querySelector("#emailInput").value = email;
+  document.querySelector("#nameInput").value = name;
 });
 closeMediaButton.addEventListener("click", closeMediaViewer);
 mediaDialog.addEventListener("click", (event) => {
@@ -1648,13 +1927,19 @@ registerButton.addEventListener("click", () => {
 logoutButton.addEventListener("click", () => {
   state.session = null;
   pendingPanel = null;
+  pendingSubscriptionPlan = null;
   saveState();
   updateHeader();
   showPanel("library");
+  renderSubscriptionPlans();
   renderPublicContent();
   history.replaceState(null, "", "#inicio");
   showView("inicio");
   notify("Sesion cerrada.");
+});
+
+manageSubscriptionButton.addEventListener("click", () => {
+  openBillingPortal(manageSubscriptionButton);
 });
 
 authForm.addEventListener("submit", (event) => {
@@ -1852,12 +2137,35 @@ contentForm.addEventListener("submit", async (event) => {
   const rawTitle = titleInput.value.trim();
   const premiumInput = document.querySelector("#itemPremium");
   const priceInput = document.querySelector("#itemPrice");
+  const type = document.querySelector("#itemType").value;
+  const isYouTube = type === "video" && document.querySelector("#itemVideoSource").value === "youtube";
+  const youtubeUrl = document.querySelector("#itemYoutubeUrl").value.trim();
+  const previewEnabled = document.querySelector("#itemPreview").checked;
+  const previewDuration = document.querySelector("#itemPreviewDuration").value || "2 min";
   const price = Number(priceInput.value || 0);
 
   if (!rawTitle) {
     notify("El titulo es obligatorio para guardar contenido.");
     titleInput.focus();
     titleInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  if (isYouTube && !getYouTubeVideoId(youtubeUrl)) {
+    notify("Introduce un enlace valido de YouTube (youtube.com o youtu.be).");
+    document.querySelector("#itemYoutubeUrl").focus();
+    return;
+  }
+
+  if (isYouTube && file) {
+    notify("Elige un enlace de YouTube o un archivo, no ambos.");
+    fileInput.focus();
+    return;
+  }
+
+  if (isYouTube && premiumInput.checked && previewEnabled && previewLimitInSeconds(previewDuration) <= 0) {
+    notify("Indica una duracion de trailer valida para el video de YouTube.");
+    document.querySelector("#itemPreviewDuration").focus();
     return;
   }
 
@@ -1871,20 +2179,26 @@ contentForm.addEventListener("submit", async (event) => {
   const existingItem = editingItemId
     ? state.items.find((entry) => entry.id === editingItemId)
     : null;
+  if (!isYouTube && existingItem?.youtubeUrl && !file) {
+    notify("Selecciona un archivo para sustituir el enlace de YouTube.");
+    fileInput.focus();
+    return;
+  }
   let item = {
     ...existingItem,
     id: existingItem?.id || `item-${Date.now()}`,
     title: rawTitle,
     description: document.querySelector("#itemDescription").value,
-    type: document.querySelector("#itemType").value,
+    type,
+    youtubeUrl: isYouTube ? youtubeUrl : "",
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
     duration: document.querySelector("#itemDuration").value || "Sin duracion",
     price,
     premium: premiumInput.checked,
-    previewEnabled: document.querySelector("#itemPreview").checked,
-    previewDuration: document.querySelector("#itemPreviewDuration").value || "2 min",
-    fileName: file?.name || existingItem?.fileName || "archivo-local-demo"
+    previewEnabled,
+    previewDuration,
+    fileName: isYouTube ? "YouTube" : file?.name || existingItem?.fileName || "archivo-local-demo"
   };
 
   const wasEditing = Boolean(existingItem);
@@ -1893,7 +2207,7 @@ contentForm.addEventListener("submit", async (event) => {
 
   try {
     let fileForUpload = file;
-    if (!fileForUpload && existingItem?.hasStoredMedia && !existingItem.databaseId) {
+    if (!fileForUpload && !item.youtubeUrl && existingItem?.hasStoredMedia && !existingItem.databaseId) {
       const storedRecord = await getStoredMedia(existingItem.id);
       if (storedRecord?.blob) {
         fileForUpload = new File(
@@ -1935,6 +2249,21 @@ contentForm.addEventListener("submit", async (event) => {
   }
 });
 
+document.querySelector("#itemType").addEventListener("change", () => {
+  if (document.querySelector("#itemType").value !== "video") {
+    document.querySelector("#itemVideoSource").value = "file";
+    document.querySelector("#itemYoutubeUrl").value = "";
+  }
+  updateVideoSourceFields();
+});
+document.querySelector("#itemVideoSource").addEventListener("change", () => {
+  if (document.querySelector("#itemVideoSource").value === "youtube") {
+    document.querySelector("#itemFile").value = "";
+  } else {
+    document.querySelector("#itemYoutubeUrl").value = "";
+  }
+  updateVideoSourceFields();
+});
 typeFilter.addEventListener("change", renderPublicContent);
 categoryFilter.addEventListener("change", renderPublicContent);
 
@@ -1944,6 +2273,7 @@ updateHeader();
 renderSiteContent();
 showTeacherSlide(0);
 renderPublicContent();
+loadSubscriptionPlans();
 routeFromHash();
 processCheckoutReturn();
 restoreStoredMedia().then(syncContentFromDatabase);

@@ -385,6 +385,79 @@ h3 {
   flex-direction: column;
 }
 
+.subscription-page {
+  max-width: 1180px;
+}
+
+.subscription-notice,
+.subscription-status-message {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.subscription-notice {
+  margin: -12px 0 16px;
+}
+
+.subscription-plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+.subscription-plan {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 225px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.subscription-plan .eyebrow,
+.subscription-plan h3,
+.subscription-plan p {
+  margin: 0;
+}
+
+.subscription-plan h3 {
+  font-size: 1.65rem;
+}
+
+.subscription-plan > p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.subscription-plan button {
+  align-self: end;
+  margin-top: auto;
+}
+
+.subscription-plan button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.subscription-dashboard h3,
+.subscription-dashboard > p {
+  margin-top: 0;
+}
+
+.subscription-dashboard .subscription-plans {
+  margin-top: 22px;
+}
+
+.auth-mode-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--sage-dark);
+  font-weight: 800;
+}
+
 .split-layout,
 .teacher-profile {
   display: grid;
@@ -664,6 +737,13 @@ label {
   font-weight: 760;
 }
 
+.form-help {
+  margin: -8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
 .content-card {
   display: grid;
   gap: 12px;
@@ -702,6 +782,10 @@ label {
   border-radius: 8px;
   background: #07131d;
   object-fit: contain;
+}
+
+.youtube-player {
+  border: 0;
 }
 
 audio.media-player {
@@ -995,6 +1079,12 @@ th {
   max-height: min(70vh, 680px);
   border-radius: 8px;
   background: #07131d;
+}
+
+iframe.dialog-media {
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 0;
 }
 
 audio.dialog-media {

@@ -6,6 +6,11 @@ import {
   publicErrorMessage,
   responseJson
 } from "../lib/payments.js";
+import {
+  stripePriceMatchesPlan,
+  stripePriceIdForPlan,
+  subscriptionPlans
+} from "../lib/subscription-plans.js";
 
 function checkoutCustomer(user) {
   return user.stripe_customer_id
@@ -22,6 +27,7 @@ export default {
     try {
       const body = await request.json();
       const purchaseType = body.purchaseType;
+      const subscriptionPlanId = String(body.subscriptionPlanId || "");
       const email = String(body.email || "").trim().toLowerCase();
       if (!email || !["lesson", "subscription"].includes(purchaseType)) {
         return responseJson({ message: "La solicitud de pago no es valida." }, 400);
@@ -97,12 +103,23 @@ export default {
         if (user.is_premium && ["active", "trialing"].includes(user.subscription_status)) {
           return responseJson({ message: "Tu suscripcion premium ya esta activa." }, 409);
         }
-        const premiumPriceId = process.env.STRIPE_PREMIUM_PRICE_ID?.trim();
+        const plan = subscriptionPlans.find((entry) => entry.id === subscriptionPlanId);
+        const premiumPriceId = stripePriceIdForPlan(subscriptionPlanId);
+        if (!plan) {
+          return responseJson({ message: "Selecciona un plan de suscripcion valido." }, 400);
+        }
         if (!premiumPriceId) {
-          const error = new Error("Falta la variable privada STRIPE_PREMIUM_PRICE_ID en Vercel.");
+          const error = new Error(`Falta configurar el precio de Stripe para el plan de ${plan.label}.`);
           error.name = "ConfigurationError";
           throw error;
         }
+        const stripePrice = await stripe.prices.retrieve(premiumPriceId);
+        if (!stripePriceMatchesPlan(stripePrice, plan)) {
+          const error = new Error(`El precio de Stripe para el plan de ${plan.label} no esta configurado correctamente.`);
+          error.name = "ConfigurationError";
+          throw error;
+        }
+        metadata.subscriptionPlanId = plan.id;
         sessionOptions.line_items = [{ price: premiumPriceId, quantity: 1 }];
         sessionOptions.subscription_data = { metadata };
       }
