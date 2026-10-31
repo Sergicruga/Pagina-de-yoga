@@ -128,42 +128,43 @@
 
       <section class="view content-band" id="view-sobre" data-view="sobre" hidden>
         <div class="section-heading">
-          <p class="eyebrow">La profesora</p>
-          <h2>Una guia cercana para practicar a tu ritmo</h2>
+          <p class="eyebrow" id="aboutEyebrow">La profesora</p>
+          <h2 id="aboutTitle">Una guia cercana para practicar a tu ritmo</h2>
         </div>
         <div class="teacher-profile">
-          <div class="teacher-photo" aria-label="Retrato provisional de la profesora de yoga">
-            <span>Profesora</span>
+          <div class="teacher-photo">
+            <img id="aboutTeacherPhoto" src="assets/profesora-provisional.png" alt="Retrato de la profesora de yoga">
+            <span id="aboutPhotoLabel">Profesora</span>
           </div>
           <div class="teacher-copy">
-            <p class="lead">Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.</p>
-            <p>La idea es que la pagina transmita calma, confianza y profesionalidad</p>
+            <p class="lead" id="aboutLead">Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.</p>
+            <p id="aboutBody">La idea es que la pagina transmita calma, confianza y profesionalidad.</p>
             <div class="teacher-stats">
-              <div><strong>+120</strong><span>clases guiadas</span></div>
-              <div><strong>4</strong><span>areas de practica</span></div>
-              <div><strong>Online</strong><span>desde casa</span></div>
+              <div><strong id="aboutStatValue1">+120</strong><span id="aboutStatLabel1">clases guiadas</span></div>
+              <div><strong id="aboutStatValue2">4</strong><span id="aboutStatLabel2">areas de practica</span></div>
+              <div><strong id="aboutStatValue3">Online</strong><span id="aboutStatLabel3">desde casa</span></div>
             </div>
           </div>
         </div>
         <div class="teacher-method">
           <article class="method-card">
-            <h3>Practica amable</h3>
-            <p>Sesiones pensadas para volver al cuerpo sin exigencia, con progresiones claras y opciones sencillas.</p>
+            <h3 id="aboutMethodTitle1">Practica amable</h3>
+            <p id="aboutMethodDescription1">Sesiones pensadas para volver al cuerpo sin exigencia, con progresiones claras y opciones sencillas.</p>
           </article>
           <article class="method-card">
-            <h3>Respiracion y calma</h3>
-            <p>Audios y ejercicios breves para regular energia, descansar mejor y sostener una rutina realista.</p>
+            <h3 id="aboutMethodTitle2">Respiracion y calma</h3>
+            <p id="aboutMethodDescription2">Audios y ejercicios breves para regular energia, descansar mejor y sostener una rutina realista.</p>
           </article>
           <article class="method-card">
-            <h3>Contenido premium</h3>
-            <p>Una biblioteca privada para alumnas que quieren seguir practicando con acompanamiento constante.</p>
+            <h3 id="aboutMethodTitle3">Contenido premium</h3>
+            <p id="aboutMethodDescription3">Una biblioteca privada para alumnas que quieren seguir practicando con acompanamiento constante.</p>
           </article>
         </div>
         <section class="about-library" aria-labelledby="aboutLibraryTitle">
           <div class="section-heading compact-heading">
-            <p class="eyebrow">Libros y reflexiones</p>
+            <p class="eyebrow" id="aboutLibraryEyebrow">Libros y reflexiones</p>
             <h3 id="aboutLibraryTitle">Un espacio para compartir con calma</h3>
-            <p>Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla.</p>
+            <p id="aboutLibraryDescription">Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla.</p>
           </div>
           <div class="content-grid about-grid" id="aboutContentGrid"></div>
         </section>
@@ -267,15 +268,24 @@
 
       <section class="view content-band" id="view-contacto" data-view="contacto" hidden>
         <div class="section-heading">
-          <p class="eyebrow">Contacto</p>
-          <h2>Reserva y dudas</h2>
+          <p class="eyebrow" id="contactEyebrow">Contacto</p>
+          <h2 id="contactTitle">Reserva y dudas</h2>
+          <p id="contactIntro">Escribeme para resolver tus dudas o encontrar la practica que mejor encaja contigo.</p>
         </div>
-        <form class="contact-form">
-          <label>Nombre<input type="text" placeholder="Tu nombre"></label>
-          <label>Email<input type="email" placeholder="tu@email.com"></label>
-          <label>Mensaje<textarea rows="5" placeholder="Cuentame que necesitas"></textarea></label>
-          <button class="primary-button" type="button">Enviar consulta</button>
-        </form>
+        <div class="contact-layout">
+          <div class="contact-details" id="contactDetails">
+            <a id="contactEmailLink" href="#" hidden></a>
+            <a id="contactPhoneLink" href="#" hidden></a>
+            <a id="contactWhatsappLink" href="#" target="_blank" rel="noopener" hidden>Escribir por WhatsApp</a>
+          </div>
+          <form class="contact-form" id="contactForm">
+            <label>Nombre<input id="contactName" type="text" autocomplete="name" placeholder="Tu nombre" required></label>
+            <label>Email<input id="contactReplyEmail" type="email" autocomplete="email" placeholder="tu@email.com" required></label>
+            <label>Mensaje<textarea id="contactMessage" rows="5" placeholder="Cuentame que necesitas" required></textarea></label>
+            <button class="primary-button" type="submit">Enviar consulta</button>
+            <p class="contact-status" id="contactStatus" aria-live="polite"></p>
+          </form>
+        </div>
       </section>
 
       <section class="view app-shell" id="view-dashboard" data-view="dashboard" hidden>
@@ -436,6 +446,53 @@
                   <label>Titulo<input id="siteTeacherTitle3" type="text" required></label>
                   <label>Descripcion<textarea id="siteTeacherDescription3" rows="3" required></textarea></label>
                 </div>
+              </section>
+
+              <section class="site-editor-section">
+                <h4>Pagina Sobre mi</h4>
+                <label>Etiqueta superior<input id="siteAboutEyebrow" type="text" required></label>
+                <label>Titulo principal<input id="siteAboutTitle" type="text" required></label>
+                <label>Texto destacado<textarea id="siteAboutLead" rows="3" required></textarea></label>
+                <label>Segundo texto<textarea id="siteAboutBody" rows="3" required></textarea></label>
+                <div class="site-editor-repeat-grid">
+                  <label>Cifra 1<input id="siteAboutStatValue1" type="text" required></label>
+                  <label>Texto 1<input id="siteAboutStatLabel1" type="text" required></label>
+                  <label>Cifra 2<input id="siteAboutStatValue2" type="text" required></label>
+                  <label>Texto 2<input id="siteAboutStatLabel2" type="text" required></label>
+                  <label>Cifra 3<input id="siteAboutStatValue3" type="text" required></label>
+                  <label>Texto 3<input id="siteAboutStatLabel3" type="text" required></label>
+                </div>
+                <div class="site-editor-slide">
+                  <h5>Bloque 1</h5>
+                  <label>Titulo<input id="siteAboutMethodTitle1" type="text" required></label>
+                  <label>Descripcion<textarea id="siteAboutMethodDescription1" rows="3" required></textarea></label>
+                </div>
+                <div class="site-editor-slide">
+                  <h5>Bloque 2</h5>
+                  <label>Titulo<input id="siteAboutMethodTitle2" type="text" required></label>
+                  <label>Descripcion<textarea id="siteAboutMethodDescription2" rows="3" required></textarea></label>
+                </div>
+                <div class="site-editor-slide">
+                  <h5>Bloque 3</h5>
+                  <label>Titulo<input id="siteAboutMethodTitle3" type="text" required></label>
+                  <label>Descripcion<textarea id="siteAboutMethodDescription3" rows="3" required></textarea></label>
+                </div>
+                <label>Etiqueta de libros y reflexiones<input id="siteAboutLibraryEyebrow" type="text" required></label>
+                <label>Titulo de libros y reflexiones<input id="siteAboutLibraryTitle" type="text" required></label>
+                <label>Descripcion de libros y reflexiones<textarea id="siteAboutLibraryDescription" rows="3" required></textarea></label>
+              </section>
+
+              <section class="site-editor-section">
+                <h4>Pagina de contacto</h4>
+                <label>Etiqueta superior<input id="siteContactEyebrow" type="text" required></label>
+                <label>Titulo<input id="siteContactTitle" type="text" required></label>
+                <label>Presentacion<textarea id="siteContactIntro" rows="3" required></textarea></label>
+                <div class="form-grid">
+                  <label>Email de contacto<input id="siteContactEmail" type="email" placeholder="hola@tudominio.com"></label>
+                  <label>Telefono visible<input id="siteContactPhone" type="tel" placeholder="+34 600 000 000"></label>
+                  <label>WhatsApp<input id="siteContactWhatsapp" type="tel" placeholder="34600000000"></label>
+                </div>
+                <p class="form-help">El formulario abrira el correo del visitante con el mensaje preparado. Introduce al menos un email para activarlo.</p>
               </section>
 
               <section class="site-editor-section">

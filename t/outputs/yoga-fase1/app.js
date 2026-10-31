@@ -117,6 +117,8 @@ const defaultSiteContent = {
   heroTitle: "Reset de Conciencia",
   heroDescription: "Un espacio para volver al cuerpo, respirar con calma y practicar a tu ritmo mediante clases de yoga, meditaciones y audios guiados.",
   teacherPhotoCustom: false,
+  teacherPhotoUrl: "",
+  teacherPhotoStoragePath: "",
   teacherSlides: [
     {
       title: "Hola, soy Miriam",
@@ -131,6 +133,33 @@ const defaultSiteContent = {
       description: "Encontraras yoga, meditaciones y ejercicios de respiracion pensados para integrar el bienestar en tu vida cotidiana."
     }
   ],
+  about: {
+    eyebrow: "La profesora",
+    title: "Una guia cercana para practicar a tu ritmo",
+    lead: "Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.",
+    body: "La idea es que la pagina transmita calma, confianza y profesionalidad.",
+    stats: [
+      { value: "+120", label: "clases guiadas" },
+      { value: "4", label: "areas de practica" },
+      { value: "Online", label: "desde casa" }
+    ],
+    methods: [
+      { title: "Practica amable", description: "Sesiones pensadas para volver al cuerpo sin exigencia, con progresiones claras y opciones sencillas." },
+      { title: "Respiracion y calma", description: "Audios y ejercicios breves para regular energia, descansar mejor y sostener una rutina realista." },
+      { title: "Contenido premium", description: "Una biblioteca privada para alumnas que quieren seguir practicando con acompanamiento constante." }
+    ],
+    libraryEyebrow: "Libros y reflexiones",
+    libraryTitle: "Un espacio para compartir con calma",
+    libraryDescription: "Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla."
+  },
+  contact: {
+    eyebrow: "Contacto",
+    title: "Reserva y dudas",
+    intro: "Escribeme para resolver tus dudas o encontrar la practica que mejor encaja contigo.",
+    email: "",
+    phone: "",
+    whatsapp: ""
+  },
   services: {
     yoga: {
       cardTitle: "Yoga online",
@@ -196,10 +225,17 @@ const serviceDetailLibraryTitle = document.querySelector("#serviceDetailLibraryT
 const serviceDetailGrid = document.querySelector("#serviceDetailGrid");
 const siteContentForm = document.querySelector("#siteContentForm");
 const publicTeacherPhoto = document.querySelector("#publicTeacherPhoto");
+const aboutTeacherPhoto = document.querySelector("#aboutTeacherPhoto");
 const teacherPhotoLabel = document.querySelector("#teacherPhotoLabel");
 const siteTeacherPhotoInput = document.querySelector("#siteTeacherPhoto");
 const siteTeacherPhotoPreview = document.querySelector("#siteTeacherPhotoPreview");
 const resetTeacherPhotoButton = document.querySelector("#resetTeacherPhotoButton");
+const contactForm = document.querySelector("#contactForm");
+const contactDetails = document.querySelector("#contactDetails");
+const contactEmailLink = document.querySelector("#contactEmailLink");
+const contactPhoneLink = document.querySelector("#contactPhoneLink");
+const contactWhatsappLink = document.querySelector("#contactWhatsappLink");
+const contactStatus = document.querySelector("#contactStatus");
 const subscriptionPlanContainers = [
   document.querySelector("#publicSubscriptionPlans"),
   document.querySelector("#dashboardSubscriptionPlans")
@@ -215,7 +251,10 @@ const mediaDatabaseName = "luma-yoga-media";
 const mediaStoreName = "uploads";
 
 const siteTeacherPhotoStorageId = "site-teacher-photo";
+const siteSettingsSlug = "site-settings";
+const siteSettingsCategory = "__site";
 let pendingPanel = null;
+let siteSettingsDatabaseId = null;
 let editingItemId = null;
 let currentTeacherSlide = 0;
 let pendingSitePhotoPreviewUrl = null;
@@ -240,17 +279,38 @@ function loadState() {
 function normalizeSiteContent(savedContent = {}) {
   const savedSlides = Array.isArray(savedContent.teacherSlides) ? savedContent.teacherSlides : [];
   const savedServices = savedContent.services || {};
+  const savedAbout = savedContent.about || {};
+  const savedStats = Array.isArray(savedAbout.stats) ? savedAbout.stats : [];
+  const savedMethods = Array.isArray(savedAbout.methods) ? savedAbout.methods : [];
   const hasCurrentBranding = Number(savedContent.brandingVersion || 0) >= defaultSiteContent.brandingVersion;
 
   return {
     brandingVersion: defaultSiteContent.brandingVersion,
     heroTitle: hasCurrentBranding ? savedContent.heroTitle ?? defaultSiteContent.heroTitle : defaultSiteContent.heroTitle,
     heroDescription: hasCurrentBranding ? savedContent.heroDescription ?? defaultSiteContent.heroDescription : defaultSiteContent.heroDescription,
-    teacherPhotoCustom: Boolean(savedContent.teacherPhotoCustom),
+    teacherPhotoCustom: Boolean(savedContent.teacherPhotoCustom || savedContent.teacherPhotoUrl),
+    teacherPhotoUrl: String(savedContent.teacherPhotoUrl || ""),
+    teacherPhotoStoragePath: String(savedContent.teacherPhotoStoragePath || ""),
     teacherSlides: defaultSiteContent.teacherSlides.map((slide, index) => ({
       ...slide,
       ...(savedSlides[index] || {})
     })),
+    about: {
+      ...defaultSiteContent.about,
+      ...savedAbout,
+      stats: defaultSiteContent.about.stats.map((stat, index) => ({
+        ...stat,
+        ...(savedStats[index] || {})
+      })),
+      methods: defaultSiteContent.about.methods.map((method, index) => ({
+        ...method,
+        ...(savedMethods[index] || {})
+      }))
+    },
+    contact: {
+      ...defaultSiteContent.contact,
+      ...(savedContent.contact || {})
+    },
     services: Object.fromEntries(Object.entries(defaultSiteContent.services).map(([key, service]) => [
       key,
       {
@@ -483,6 +543,123 @@ function safeStorageFileName(fileName) {
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return normalizedName || "archivo";
+}
+
+function siteContentFromDatabase(row) {
+  let storedContent = {};
+  try {
+    storedContent = JSON.parse(row?.body || "{}");
+  } catch (error) {
+    console.error("Could not parse site settings:", error);
+  }
+
+  return normalizeSiteContent({
+    ...storedContent,
+    teacherPhotoUrl: storedContent.teacherPhotoUrl || row?.thumbnail_url || ""
+  });
+}
+
+async function syncSiteContentFromDatabase() {
+  try {
+    const db = await getDatabase();
+    if (!db) return;
+
+    const { data, error } = await db
+      .from("lessons")
+      .select("id,body,thumbnail_url")
+      .eq("slug", siteSettingsSlug)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return;
+
+    siteSettingsDatabaseId = data.id;
+    state.siteContent = siteContentFromDatabase(data);
+    saveState();
+    renderSiteContent();
+    if (isTeacher() && window.location.hash === "#dashboard") populateSiteEditor();
+  } catch (error) {
+    console.error("Could not load public site settings from Supabase:", error);
+    notify("No se pudieron cargar los textos publicos de Supabase.");
+  }
+}
+
+async function saveSiteContentToDatabase(siteContent, selectedPhotoFile = null) {
+  const db = await getDatabase();
+  if (!db) throw new Error("No se pudo iniciar la conexion con Supabase");
+
+  const previousPath = state.siteContent.teacherPhotoStoragePath || "";
+  let nextContent = normalizeSiteContent(siteContent);
+  let uploadedPath = "";
+  let photoFile = selectedPhotoFile;
+  let photoFileName = selectedPhotoFile?.name || "";
+
+  if (!photoFile && nextContent.teacherPhotoCustom && !nextContent.teacherPhotoUrl) {
+    const storedPhoto = await getStoredMedia(siteTeacherPhotoStorageId).catch(() => null);
+    if (storedPhoto?.blob) {
+      photoFile = storedPhoto.blob;
+      photoFileName = storedPhoto.name || "foto-profesora.jpg";
+    }
+  }
+
+  try {
+    if (photoFile) {
+      uploadedPath = `site/${Date.now()}-${safeStorageFileName(photoFileName || "foto-profesora.jpg")}`;
+      const { error: uploadError } = await db.storage
+        .from(supabaseMediaBucket)
+        .upload(uploadedPath, photoFile, {
+          cacheControl: "3600",
+          contentType: photoFile.type || "image/jpeg",
+          upsert: false
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(uploadedPath);
+      if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica de la fotografia");
+
+      nextContent = normalizeSiteContent({
+        ...nextContent,
+        teacherPhotoCustom: true,
+        teacherPhotoUrl: publicUrlData.publicUrl,
+        teacherPhotoStoragePath: uploadedPath
+      });
+    }
+
+    if (!nextContent.teacherPhotoCustom) {
+      nextContent.teacherPhotoUrl = "";
+      nextContent.teacherPhotoStoragePath = "";
+    }
+
+    const payload = {
+      title: "Configuracion de la web",
+      slug: siteSettingsSlug,
+      description: "Textos y datos publicos de Reset de Conciencia",
+      body: JSON.stringify(nextContent),
+      category: siteSettingsCategory,
+      thumbnail_url: nextContent.teacherPhotoUrl || null,
+      is_premium: false,
+      is_published: false,
+      published_at: null
+    };
+
+    const { data, error } = await db
+      .from("lessons")
+      .upsert(payload, { onConflict: "slug" })
+      .select("id,body,thumbnail_url")
+      .single();
+    if (error) throw error;
+
+    siteSettingsDatabaseId = data.id;
+    const savedContent = siteContentFromDatabase(data);
+    if (previousPath && previousPath !== savedContent.teacherPhotoStoragePath) {
+      const { error: removeError } = await db.storage.from(supabaseMediaBucket).remove([previousPath]);
+      if (removeError) console.error("Could not remove previous teacher photo:", removeError);
+    }
+    return savedContent;
+  } catch (error) {
+    if (uploadedPath) await db.storage.from(supabaseMediaBucket).remove([uploadedPath]);
+    throw error;
+  }
 }
 
 const contentTypeLabels = {
@@ -987,7 +1164,7 @@ function renderAboutContent() {
     : '<p class="empty-service-content">Proximamente encontraras aqui libros y pensamientos de la profesora.</p>';
 }
 function currentTeacherPhotoUrl() {
-  return mediaUrls.get(siteTeacherPhotoStorageId) || "assets/profesora-provisional.png";
+  return state.siteContent.teacherPhotoUrl || mediaUrls.get(siteTeacherPhotoStorageId) || "assets/profesora-provisional.png";
 }
 
 function renderSiteContent() {
@@ -1007,8 +1184,44 @@ function renderSiteContent() {
 
   const photoUrl = currentTeacherPhotoUrl();
   publicTeacherPhoto.src = photoUrl;
+  aboutTeacherPhoto.src = photoUrl;
   siteTeacherPhotoPreview.src = photoUrl;
-  teacherPhotoLabel.textContent = mediaUrls.has(siteTeacherPhotoStorageId) ? "Foto de la profesora" : "Foto provisional";
+  const hasTeacherPhoto = Boolean(siteContent.teacherPhotoUrl || mediaUrls.has(siteTeacherPhotoStorageId));
+  teacherPhotoLabel.textContent = hasTeacherPhoto ? "Foto de la profesora" : "Foto provisional";
+
+  const about = siteContent.about;
+  document.querySelector("#aboutEyebrow").textContent = about.eyebrow;
+  document.querySelector("#aboutTitle").textContent = about.title;
+  document.querySelector("#aboutLead").textContent = about.lead;
+  document.querySelector("#aboutBody").textContent = about.body;
+  about.stats.forEach((stat, index) => {
+    document.querySelector(`#aboutStatValue${index + 1}`).textContent = stat.value;
+    document.querySelector(`#aboutStatLabel${index + 1}`).textContent = stat.label;
+  });
+  about.methods.forEach((method, index) => {
+    document.querySelector(`#aboutMethodTitle${index + 1}`).textContent = method.title;
+    document.querySelector(`#aboutMethodDescription${index + 1}`).textContent = method.description;
+  });
+  document.querySelector("#aboutLibraryEyebrow").textContent = about.libraryEyebrow;
+  document.querySelector("#aboutLibraryTitle").textContent = about.libraryTitle;
+  document.querySelector("#aboutLibraryDescription").textContent = about.libraryDescription;
+
+  const contact = siteContent.contact;
+  document.querySelector("#contactEyebrow").textContent = contact.eyebrow;
+  document.querySelector("#contactTitle").textContent = contact.title;
+  document.querySelector("#contactIntro").textContent = contact.intro;
+
+  contactEmailLink.hidden = !contact.email;
+  contactEmailLink.href = contact.email ? `mailto:${contact.email}` : "#";
+  contactEmailLink.textContent = contact.email || "";
+  contactPhoneLink.hidden = !contact.phone;
+  contactPhoneLink.href = contact.phone ? `tel:${contact.phone.replace(/\s+/g, "")}` : "#";
+  contactPhoneLink.textContent = contact.phone || "";
+  const whatsappNumber = String(contact.whatsapp || "").replace(/\D/g, "");
+  contactWhatsappLink.hidden = !whatsappNumber;
+  contactWhatsappLink.href = whatsappNumber ? `https://wa.me/${whatsappNumber}` : "#";
+  contactDetails.hidden = !contact.email && !contact.phone && !whatsappNumber;
+  contactStatus.textContent = contact.email ? "" : "La profesora publicara aqui su email de contacto.";
 
   const currentRoute = window.location.hash.replace("#", "");
   const serviceKey = currentRoute.startsWith("servicio-") ? currentRoute.replace("servicio-", "") : null;
@@ -1023,6 +1236,31 @@ function populateSiteEditor() {
     document.querySelector(`#siteTeacherTitle${index + 1}`).value = slide.title;
     document.querySelector(`#siteTeacherDescription${index + 1}`).value = slide.description;
   });
+
+  const about = siteContent.about;
+  document.querySelector("#siteAboutEyebrow").value = about.eyebrow;
+  document.querySelector("#siteAboutTitle").value = about.title;
+  document.querySelector("#siteAboutLead").value = about.lead;
+  document.querySelector("#siteAboutBody").value = about.body;
+  about.stats.forEach((stat, index) => {
+    document.querySelector(`#siteAboutStatValue${index + 1}`).value = stat.value;
+    document.querySelector(`#siteAboutStatLabel${index + 1}`).value = stat.label;
+  });
+  about.methods.forEach((method, index) => {
+    document.querySelector(`#siteAboutMethodTitle${index + 1}`).value = method.title;
+    document.querySelector(`#siteAboutMethodDescription${index + 1}`).value = method.description;
+  });
+  document.querySelector("#siteAboutLibraryEyebrow").value = about.libraryEyebrow;
+  document.querySelector("#siteAboutLibraryTitle").value = about.libraryTitle;
+  document.querySelector("#siteAboutLibraryDescription").value = about.libraryDescription;
+
+  const contact = siteContent.contact;
+  document.querySelector("#siteContactEyebrow").value = contact.eyebrow;
+  document.querySelector("#siteContactTitle").value = contact.title;
+  document.querySelector("#siteContactIntro").value = contact.intro;
+  document.querySelector("#siteContactEmail").value = contact.email;
+  document.querySelector("#siteContactPhone").value = contact.phone;
+  document.querySelector("#siteContactWhatsapp").value = contact.whatsapp;
 
   const fieldPrefixes = {
     yoga: "Yoga",
@@ -1814,6 +2052,7 @@ function appendDocumentViewer(container, asset) {
 }
 
 function openMediaViewer(item, preview = false) {
+  const restrictedPreview = preview && item.premium && !canOpen(item);
   const assets = normalizeItemAssets(item);
   const fallbackUrl = mediaUrls.get(item.id);
   if (fallbackUrl && assets.length === 0) {
@@ -2197,24 +2436,53 @@ siteTeacherPhotoInput.addEventListener("change", () => {
 
 resetTeacherPhotoButton.addEventListener("click", async () => {
   if (!isTeacher()) return;
-  const currentUrl = mediaUrls.get(siteTeacherPhotoStorageId);
-  if (currentUrl) URL.revokeObjectURL(currentUrl);
-  mediaUrls.delete(siteTeacherPhotoStorageId);
-  if (pendingSitePhotoPreviewUrl) {
-    URL.revokeObjectURL(pendingSitePhotoPreviewUrl);
-    pendingSitePhotoPreviewUrl = null;
-  }
-  siteTeacherPhotoInput.value = "";
-  state.siteContent.teacherPhotoCustom = false;
-  saveState();
+  resetTeacherPhotoButton.disabled = true;
   try {
+    const nextContent = normalizeSiteContent({
+      ...state.siteContent,
+      teacherPhotoCustom: false,
+      teacherPhotoUrl: "",
+      teacherPhotoStoragePath: ""
+    });
+    state.siteContent = await saveSiteContentToDatabase(nextContent);
+    saveState();
+
+    const currentUrl = mediaUrls.get(siteTeacherPhotoStorageId);
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    mediaUrls.delete(siteTeacherPhotoStorageId);
+    if (pendingSitePhotoPreviewUrl) {
+      URL.revokeObjectURL(pendingSitePhotoPreviewUrl);
+      pendingSitePhotoPreviewUrl = null;
+    }
+    siteTeacherPhotoInput.value = "";
     await deleteStoredMedia(siteTeacherPhotoStorageId);
+    renderSiteContent();
+    populateSiteEditor();
+    notify("Se ha restaurado la foto provisional en todos los dispositivos.");
   } catch (error) {
     console.error("Could not reset teacher photo:", error);
+    notify(`No se pudo restaurar la foto: ${error.message || "revisa Supabase"}`);
+  } finally {
+    resetTeacherPhotoButton.disabled = false;
   }
-  renderSiteContent();
-  populateSiteEditor();
-  notify("Se ha restaurado la foto provisional.");
+});
+
+contactForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const destination = state.siteContent.contact.email.trim();
+  if (!destination) {
+    contactStatus.textContent = "El email de contacto todavia no esta configurado.";
+    notify("La profesora debe configurar un email de contacto.");
+    return;
+  }
+
+  const name = document.querySelector("#contactName").value.trim();
+  const replyEmail = document.querySelector("#contactReplyEmail").value.trim();
+  const message = document.querySelector("#contactMessage").value.trim();
+  const subject = encodeURIComponent(`Consulta desde Reset de Conciencia - ${name}`);
+  const body = encodeURIComponent(`Nombre: ${name}\nEmail de respuesta: ${replyEmail}\n\n${message}`);
+  contactStatus.textContent = "Abriendo tu aplicacion de correo...";
+  window.location.href = `mailto:${destination}?subject=${subject}&body=${body}`;
 });
 
 siteContentForm.addEventListener("submit", async (event) => {
@@ -2233,10 +2501,37 @@ siteContentForm.addEventListener("submit", async (event) => {
     heroTitle: readValue("#siteHeroTitle"),
     heroDescription: readValue("#siteHeroDescription"),
     teacherPhotoCustom: photoFile ? true : state.siteContent.teacherPhotoCustom,
+    teacherPhotoUrl: state.siteContent.teacherPhotoUrl,
+    teacherPhotoStoragePath: state.siteContent.teacherPhotoStoragePath,
     teacherSlides: [1, 2, 3].map((number) => ({
       title: readValue(`#siteTeacherTitle${number}`),
       description: readValue(`#siteTeacherDescription${number}`)
     })),
+    about: {
+      eyebrow: readValue("#siteAboutEyebrow"),
+      title: readValue("#siteAboutTitle"),
+      lead: readValue("#siteAboutLead"),
+      body: readValue("#siteAboutBody"),
+      stats: [1, 2, 3].map((number) => ({
+        value: readValue(`#siteAboutStatValue${number}`),
+        label: readValue(`#siteAboutStatLabel${number}`)
+      })),
+      methods: [1, 2, 3].map((number) => ({
+        title: readValue(`#siteAboutMethodTitle${number}`),
+        description: readValue(`#siteAboutMethodDescription${number}`)
+      })),
+      libraryEyebrow: readValue("#siteAboutLibraryEyebrow"),
+      libraryTitle: readValue("#siteAboutLibraryTitle"),
+      libraryDescription: readValue("#siteAboutLibraryDescription")
+    },
+    contact: {
+      eyebrow: readValue("#siteContactEyebrow"),
+      title: readValue("#siteContactTitle"),
+      intro: readValue("#siteContactIntro"),
+      email: readValue("#siteContactEmail").toLowerCase(),
+      phone: readValue("#siteContactPhone"),
+      whatsapp: readValue("#siteContactWhatsapp")
+    },
     services: {
       yoga: {
         cardTitle: readValue("#siteYogaCardTitle"),
@@ -2264,18 +2559,12 @@ siteContentForm.addEventListener("submit", async (event) => {
   submitButton.textContent = "Guardando...";
 
   try {
-    if (photoFile) {
-      await storeMediaFile(siteTeacherPhotoStorageId, photoFile);
-      const previousUrl = mediaUrls.get(siteTeacherPhotoStorageId);
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-      mediaUrls.set(siteTeacherPhotoStorageId, URL.createObjectURL(photoFile));
-    }
-
-    state.siteContent = nextSiteContent;
+    state.siteContent = await saveSiteContentToDatabase(nextSiteContent, photoFile);
+    if (photoFile) await storeMediaFile(siteTeacherPhotoStorageId, photoFile);
     saveState();
     renderSiteContent();
     populateSiteEditor();
-    notify("Los cambios de la web se han guardado.");
+    notify("Los cambios se han guardado en Supabase y ya se veran en todos los dispositivos.");
   } catch (error) {
     console.error("Could not save site content:", error);
     notify(`No se pudieron guardar los cambios: ${error.message || "revisa el almacenamiento"}`);
@@ -2464,4 +2753,7 @@ loadSubscriptionPlans();
 updateContentTypeFields();
 routeFromHash();
 processCheckoutReturn();
-restoreStoredMedia().then(syncContentFromDatabase);
+restoreStoredMedia().then(() => Promise.all([
+  syncContentFromDatabase(),
+  syncSiteContentFromDatabase()
+]));
