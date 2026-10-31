@@ -1,71 +1,13 @@
 const storageKey = "luma-yoga-prototype";
 const checkoutStorageKey = "reset-checkout-return";
 
-const seedItems = [
-  {
-    id: "item-1",
-    title: "Yoga suave de manana",
-    description: "Una practica corta para despertar el cuerpo con calma.",
-    type: "video",
-    category: "Yoga",
-    level: "Principiante",
-    duration: "22 min",
-    price: 0,
-    premium: false,
-    previewEnabled: false,
-    previewDuration: "",
-    fileName: "demo-video.mp4"
-  },
-  {
-    id: "item-2",
-    title: "Meditacion para dormir",
-    description: "Audio guiado para cerrar el dia y soltar tension.",
-    type: "audio",
-    category: "Meditacion",
-    level: "Principiante",
-    duration: "14 min",
-    price: 0,
-    premium: false,
-    previewEnabled: false,
-    previewDuration: "",
-    fileName: "demo-audio.mp3"
-  },
-  {
-    id: "item-3",
-    title: "Respiracion profunda",
-    description: "Ejercicio premium para regular energia y enfoque.",
-    type: "audio",
-    category: "Respiracion",
-    level: "Intermedio",
-    duration: "11 min",
-    price: 4,
-    premium: true,
-    previewEnabled: true,
-    previewDuration: "2 min",
-    fileName: "premium-audio.mp3"
-  },
-  {
-    id: "item-4",
-    title: "Flow de caderas",
-    description: "Clase premium de movilidad, apertura y estabilidad.",
-    type: "video",
-    category: "Yoga",
-    level: "Intermedio",
-    duration: "38 min",
-    price: 9,
-    premium: true,
-    previewEnabled: true,
-    previewDuration: "4 min",
-    fileName: "premium-video.mp4"
-  }
-];
-const seedItemIds = new Set(seedItems.map((item) => item.id));
+const seedItems = [];
+const legacySampleItemIds = new Set(["item-1", "item-2", "item-3", "item-4"]);
 
 const seedUsers = [
-  { email: "alumna@demo.com", name: "Alumna/o Demo", passwordHash: "demo:demo123", role: "user", premium: false, purchases: [] },
-  { email: "premium@demo.com", name: "Premium Demo", passwordHash: "demo:demo123", role: "user", premium: true, purchases: [] },
   { email: "profesora@demo.com", name: "Miriam", passwordHash: "demo:demo123", role: "teacher", premium: true, purchases: [] }
 ];
+const legacySampleUserEmails = new Set(["alumna@demo.com", "premium@demo.com"]);
 
 const serviceDetails = {
   yoga: {
@@ -113,7 +55,7 @@ const serviceDetails = {
 };
 
 const defaultSiteContent = {
-  brandingVersion: 1,
+  brandingVersion: 2,
   heroTitle: "Reset de Conciencia",
   heroDescription: "Un espacio para volver al cuerpo, respirar con calma y practicar a tu ritmo mediante clases de yoga, meditaciones y audios guiados.",
   teacherPhotoCustom: false,
@@ -134,14 +76,15 @@ const defaultSiteContent = {
     }
   ],
   about: {
+    photoLabel: "Miriam",
     eyebrow: "La profesora",
-    title: "Una guia cercana para practicar a tu ritmo",
-    lead: "Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.",
-    body: "La idea es que la pagina transmita calma, confianza y profesionalidad.",
+    title: "Yoga, respiracion y bienestar con cercania",
+    lead: "Soy Miriam y acompano a personas que quieren cuidarse mediante una practica consciente, cercana y respetuosa con su propio ritmo.",
+    body: "En este espacio encontraras propuestas para moverte, respirar y crear momentos de calma que puedas integrar en tu vida cotidiana.",
     stats: [
-      { value: "+120", label: "clases guiadas" },
-      { value: "4", label: "areas de practica" },
-      { value: "Online", label: "desde casa" }
+      { value: "Yoga", label: "movimiento consciente" },
+      { value: "Respira", label: "practicas de calma" },
+      { value: "Online", label: "desde donde estes" }
     ],
     methods: [
       { title: "Practica amable", description: "Sesiones pensadas para volver al cuerpo sin exigencia, con progresiones claras y opciones sencillas." },
@@ -150,7 +93,10 @@ const defaultSiteContent = {
     ],
     libraryEyebrow: "Libros y reflexiones",
     libraryTitle: "Un espacio para compartir con calma",
-    libraryDescription: "Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla."
+    libraryDescription: "Textos, libros y pensamientos de la profesora para seguir acompanando la practica dentro y fuera de la esterilla.",
+    ctaEyebrow: "Empieza a practicar",
+    ctaTitle: "Descubre las clases y contenidos disponibles",
+    ctaButtonText: "Ver contenido"
   },
   contact: {
     eyebrow: "Contacto",
@@ -279,10 +225,10 @@ function loadState() {
 function normalizeSiteContent(savedContent = {}) {
   const savedSlides = Array.isArray(savedContent.teacherSlides) ? savedContent.teacherSlides : [];
   const savedServices = savedContent.services || {};
-  const savedAbout = savedContent.about || {};
+  const hasCurrentBranding = Number(savedContent.brandingVersion || 0) >= defaultSiteContent.brandingVersion;
+  const savedAbout = hasCurrentBranding ? savedContent.about || {} : {};
   const savedStats = Array.isArray(savedAbout.stats) ? savedAbout.stats : [];
   const savedMethods = Array.isArray(savedAbout.methods) ? savedAbout.methods : [];
-  const hasCurrentBranding = Number(savedContent.brandingVersion || 0) >= defaultSiteContent.brandingVersion;
 
   return {
     brandingVersion: defaultSiteContent.brandingVersion,
@@ -323,10 +269,12 @@ function normalizeSiteContent(savedContent = {}) {
 
 function normalizeState(savedState) {
   const savedItems = Array.isArray(savedState.items) ? savedState.items : [];
-  const mergedItems = [
-    ...seedItems,
-    ...savedItems.filter((savedItem) => !seedItems.some((seedItem) => seedItem.id === savedItem.id))
-  ];
+  const mergedItems = savedItems.filter((savedItem) => !legacySampleItemIds.has(savedItem.id));
+  const savedUsers = Array.isArray(savedState.users) ? savedState.users : seedUsers;
+  const mergedUsers = [
+    ...seedUsers,
+    ...savedUsers.filter((savedUser) => !seedUsers.some((seedUser) => seedUser.email === savedUser.email))
+  ].filter((user) => !legacySampleUserEmails.has(user.email));
 
   return {
     ...savedState,
@@ -339,7 +287,7 @@ function normalizeState(savedState) {
       previewEnabled: item.previewEnabled ?? (item.premium && ["item-3", "item-4"].includes(item.id)),
       previewDuration: item.previewDuration ?? (item.id === "item-4" ? "4 min" : "2 min")
     })),
-    users: (Array.isArray(savedState.users) ? savedState.users : seedUsers).map((user) => {
+    users: mergedUsers.map((user) => {
       const seedUser = seedUsers.find((entry) => entry.email === user.email);
 
       return {
@@ -397,12 +345,12 @@ async function startStripeCheckout(purchaseType, item, button, subscriptionPlanI
   }
 
   if (!user.id) {
-    notify("La cuenta demo solo existe en este navegador. Cierra sesion y registra una cuenta para probar el pago.");
+    notify("Esta cuenta todavia no esta disponible para realizar pagos.");
     return;
   }
 
   if (purchaseType === "lesson" && !item?.databaseId) {
-    notify("Esta clase de demostracion no esta guardada en Supabase y no se puede cobrar.");
+    notify("Este contenido todavia no esta disponible para compra.");
     return;
   }
 
@@ -580,7 +528,6 @@ async function syncSiteContentFromDatabase() {
     if (isTeacher() && window.location.hash === "#dashboard") populateSiteEditor();
   } catch (error) {
     console.error("Could not load public site settings from Supabase:", error);
-    notify("No se pudieron cargar los textos publicos de Supabase.");
   }
 }
 
@@ -820,16 +767,16 @@ async function syncContentFromDatabase() {
     if (error) throw error;
 
     const databaseItems = (data || []).map(itemFromDatabase);
-    const localItems = state.items.filter((item) => !item.databaseId && !seedItemIds.has(item.id));
+    const localItems = state.items.filter((item) => !item.databaseId && !legacySampleItemIds.has(item.id));
     state.items = databaseItems.length > 0
       ? [...databaseItems, ...localItems]
-      : [...seedItems, ...localItems];
+      : localItems;
     saveState();
     renderPublicContent();
     if (state.session && window.location.hash === "#dashboard") renderDashboard();
   } catch (error) {
     console.error("Could not sync content from Supabase:", error);
-    notify(`No se pudo cargar el contenido de Supabase: ${error.message || "revisa permisos"}`);
+    notify("No se pudo actualizar el contenido. Intentalo de nuevo mas tarde.");
   }
 }
 
@@ -1082,7 +1029,7 @@ async function syncUsersFromDatabase() {
     renderUserRows();
   } catch (error) {
     console.error("Could not sync users from Supabase:", error);
-    notify(`No se pudieron cargar usuarios de Supabase: ${error.message || "revisa permisos"}`);
+    notify("No se pudo actualizar la lista de usuarios.");
   }
 }
 
@@ -1186,10 +1133,10 @@ function renderSiteContent() {
   publicTeacherPhoto.src = photoUrl;
   aboutTeacherPhoto.src = photoUrl;
   siteTeacherPhotoPreview.src = photoUrl;
-  const hasTeacherPhoto = Boolean(siteContent.teacherPhotoUrl || mediaUrls.has(siteTeacherPhotoStorageId));
-  teacherPhotoLabel.textContent = hasTeacherPhoto ? "Foto de la profesora" : "Foto provisional";
 
   const about = siteContent.about;
+  teacherPhotoLabel.textContent = about.photoLabel;
+  document.querySelector("#aboutPhotoLabel").textContent = about.photoLabel;
   document.querySelector("#aboutEyebrow").textContent = about.eyebrow;
   document.querySelector("#aboutTitle").textContent = about.title;
   document.querySelector("#aboutLead").textContent = about.lead;
@@ -1205,6 +1152,9 @@ function renderSiteContent() {
   document.querySelector("#aboutLibraryEyebrow").textContent = about.libraryEyebrow;
   document.querySelector("#aboutLibraryTitle").textContent = about.libraryTitle;
   document.querySelector("#aboutLibraryDescription").textContent = about.libraryDescription;
+  document.querySelector("#aboutCtaEyebrow").textContent = about.ctaEyebrow;
+  document.querySelector("#aboutCtaTitle").textContent = about.ctaTitle;
+  document.querySelector("#aboutCtaButton").textContent = about.ctaButtonText;
 
   const contact = siteContent.contact;
   document.querySelector("#contactEyebrow").textContent = contact.eyebrow;
@@ -1238,6 +1188,7 @@ function populateSiteEditor() {
   });
 
   const about = siteContent.about;
+  document.querySelector("#siteAboutPhotoLabel").value = about.photoLabel;
   document.querySelector("#siteAboutEyebrow").value = about.eyebrow;
   document.querySelector("#siteAboutTitle").value = about.title;
   document.querySelector("#siteAboutLead").value = about.lead;
@@ -1253,6 +1204,9 @@ function populateSiteEditor() {
   document.querySelector("#siteAboutLibraryEyebrow").value = about.libraryEyebrow;
   document.querySelector("#siteAboutLibraryTitle").value = about.libraryTitle;
   document.querySelector("#siteAboutLibraryDescription").value = about.libraryDescription;
+  document.querySelector("#siteAboutCtaEyebrow").value = about.ctaEyebrow;
+  document.querySelector("#siteAboutCtaTitle").value = about.ctaTitle;
+  document.querySelector("#siteAboutCtaButtonText").value = about.ctaButtonText;
 
   const contact = siteContent.contact;
   document.querySelector("#siteContactEyebrow").value = contact.eyebrow;
@@ -1332,8 +1286,7 @@ function contentCard(item) {
   const locked = !canOpen(item);
   const hasPreview = item.previewEnabled;
   const hasIndividualPrice = item.premium && item.price > 0;
-  const isDemoContent = seedItemIds.has(item.id) && !item.databaseId;
-  const canBuySingle = locked && hasIndividualPrice && !isDemoContent;
+  const canBuySingle = locked && hasIndividualPrice && Boolean(item.databaseId);
   const typeLabel = contentTypeLabel(item.type);
   const symbols = {
     video: "play",
@@ -1373,13 +1326,13 @@ function contentCard(item) {
         <span class="chip">${escapeHtml(item.category)}</span>
         <span class="chip">${escapeHtml(item.level)}</span>
         <span class="chip ${item.premium ? "premium" : ""}">${escapeHtml(accessText)}</span>
-        ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "demo")}</span>` : ""}
+        ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "2 min")}</span>` : ""}
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml(item.description || (item.type === "thought" ? item.body.slice(0, 180) : ""))}</p>
-      ${locked ? `<p class="preview-note">${isDemoContent
-        ? "Contenido de muestra. La compra individual se activa cuando la profesora lo publica."
+      ${locked ? `<p class="preview-note">${!item.databaseId
+        ? "La compra individual se activara cuando termine la publicacion de este contenido."
         : hasIndividualPrice
           ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
           : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
@@ -1527,14 +1480,15 @@ function editContentItem(item) {
   document.querySelector("#itemTitle").focus({ preventScroll: true });
 }
 function renderUserRows() {
-  userRows.innerHTML = state.users.map((user) => `
+  const visibleUsers = state.users.filter((user) => user.id);
+  userRows.innerHTML = visibleUsers.length ? visibleUsers.map((user) => `
     <tr>
       <td>${escapeHtml(user.name || user.email)}<br><small>${escapeHtml(user.email)}</small></td>
       <td>${user.role === "teacher" ? "Profesora" : "Alumna/o"}</td>
       <td>${user.premium ? "Si" : "No"}</td>
       <td><button class="secondary-button" type="button" data-toggle-user="${user.email}">${user.premium ? "Quitar" : "Dar"} premium</button></td>
     </tr>
-  `).join("");
+  `).join("") : '<tr><td colspan="4">Todavia no hay usuarios registrados.</td></tr>';
 }
 
 function showPanel(panelName) {
@@ -1554,9 +1508,6 @@ function openDashboardPanel(panelName) {
   if (!state.session) {
     pendingPanel = panelName;
     openAuthDialog("login");
-    document.querySelector("#emailInput").value = panelName === "admin"
-      ? "profesora@demo.com"
-      : "alumna@demo.com";
     notify(panelName === "admin" ? "Inicia sesion como profesora." : "Inicia sesion para abrir tu biblioteca.");
     return;
   }
@@ -1643,13 +1594,13 @@ async function login(email, password) {
 
           if (insertError) throw insertError;
           user = userFromDatabase(createdUser);
-          notify("Cuenta creada en Supabase.");
+          notify("La cuenta se ha creado con exito.");
         }
       } else {
         if (!existingUser) {
-          const demoUser = state.users.find((entry) => entry.email === normalizedEmail);
-          if (demoUser?.passwordHash === passwordHash) {
-            user = demoUser;
+          const fallbackUser = state.users.find((entry) => entry.email === normalizedEmail);
+          if (fallbackUser?.passwordHash === passwordHash) {
+            user = fallbackUser;
           } else {
             notify("No existe una cuenta con ese email. Registrate primero.");
             openAuthDialog("register");
@@ -1673,7 +1624,7 @@ async function login(email, password) {
     }
   } catch (error) {
     console.error("Supabase user flow failed:", error);
-    notify("No se pudo conectar con Supabase. Continuamos en modo de prueba local.");
+    notify("No se pudo comprobar la cuenta. Intentalo de nuevo.");
   }
 
   if (!user) {
@@ -2160,20 +2111,20 @@ function updateHeader() {
 function openAuthDialog(mode) {
   authMode = mode;
   const isRegister = mode === "register";
-  document.querySelector("#authEyebrow").textContent = isRegister ? "Crear cuenta" : "Acceso demo";
+  document.querySelector("#authEyebrow").textContent = isRegister ? "Crear cuenta" : "Acceso privado";
   document.querySelector("#authTitle").textContent = isRegister ? "Registrarse" : "Iniciar sesion";
   document.querySelector("#authHelper").textContent = isRegister
     ? "Crea una cuenta gratuita y entra directamente a tu espacio privado."
     : "Entra con tu email para acceder a tu espacio privado.";
   document.querySelector("#authNote").textContent = isRegister
-    ? "Demo: la contraseña se guarda en la tabla users solo para pruebas."
-    : "Demo: prueba alumna@demo.com o profesora@demo.com con demo123.";
+    ? "Tus datos se utilizaran para acceder a tu espacio privado."
+    : "Introduce los datos de tu cuenta para continuar.";
   document.querySelector("#authSubmitButton").textContent = isRegister ? "Crear cuenta" : "Entrar";
   authModeToggle.textContent = isRegister ? "Ya tengo cuenta: iniciar sesion" : "Crear una cuenta nueva";
   document.querySelectorAll(".register-only").forEach((element) => {
     element.hidden = !isRegister;
   });
-  document.querySelector("#emailInput").value = isRegister ? "" : "alumna@demo.com";
+  document.querySelector("#emailInput").value = "";
   document.querySelector("#passwordInput").value = "";
   document.querySelector("#passwordInput").autocomplete = isRegister ? "new-password" : "current-password";
   authDialog.showModal();
@@ -2286,12 +2237,12 @@ document.body.addEventListener("click", async (event) => {
       saveState();
       renderDashboard();
       renderPublicContent();
-      notify(item.databaseId ? "Contenido eliminado de Supabase." : "Contenido eliminado de la demo.");
+      notify("El contenido se ha eliminado con exito.");
     } catch (error) {
       console.error("Could not delete content from Supabase:", error);
       deleteButton.disabled = false;
       deleteButton.textContent = "Eliminar";
-      notify(`No se pudo eliminar de Supabase: ${error.message || "revisa permisos"}`);
+      notify("No se pudo eliminar el contenido. Intentalo de nuevo.");
     }
   }
 
@@ -2309,10 +2260,10 @@ document.body.addEventListener("click", async (event) => {
         .eq("email", user.email);
     }).then((result) => {
       if (result?.error) throw result.error;
-      notify(`Premium actualizado para ${user.email}.`);
+      notify(`El acceso premium de ${user.email} se ha actualizado con exito.`);
     }).catch((error) => {
       console.error("Could not update premium in Supabase:", error);
-      notify(`No se pudo actualizar premium en Supabase: ${error.message || "revisa permisos"}`);
+      notify("No se pudo actualizar el acceso premium. Intentalo de nuevo.");
     });
   }
 });
@@ -2373,8 +2324,12 @@ manageSubscriptionButton.addEventListener("click", () => {
 
 authForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const email = document.querySelector("#emailInput").value.trim() || (authMode === "register" ? "nueva@demo.com" : "alumna@demo.com");
+  const email = document.querySelector("#emailInput").value.trim();
   const password = document.querySelector("#passwordInput").value;
+  if (!email) {
+    notify("Introduce tu email.");
+    return;
+  }
   const submitButton = document.querySelector("#authSubmitButton");
   submitButton.disabled = true;
   submitButton.textContent = authMode === "register" ? "Creando cuenta..." : "Comprobando...";
@@ -2458,10 +2413,10 @@ resetTeacherPhotoButton.addEventListener("click", async () => {
     await deleteStoredMedia(siteTeacherPhotoStorageId);
     renderSiteContent();
     populateSiteEditor();
-    notify("Se ha restaurado la foto provisional en todos los dispositivos.");
+    notify("La foto por defecto se ha restaurado con exito.");
   } catch (error) {
     console.error("Could not reset teacher photo:", error);
-    notify(`No se pudo restaurar la foto: ${error.message || "revisa Supabase"}`);
+    notify("No se pudo restaurar la foto. Intentalo de nuevo.");
   } finally {
     resetTeacherPhotoButton.disabled = false;
   }
@@ -2508,6 +2463,7 @@ siteContentForm.addEventListener("submit", async (event) => {
       description: readValue(`#siteTeacherDescription${number}`)
     })),
     about: {
+      photoLabel: readValue("#siteAboutPhotoLabel"),
       eyebrow: readValue("#siteAboutEyebrow"),
       title: readValue("#siteAboutTitle"),
       lead: readValue("#siteAboutLead"),
@@ -2522,7 +2478,10 @@ siteContentForm.addEventListener("submit", async (event) => {
       })),
       libraryEyebrow: readValue("#siteAboutLibraryEyebrow"),
       libraryTitle: readValue("#siteAboutLibraryTitle"),
-      libraryDescription: readValue("#siteAboutLibraryDescription")
+      libraryDescription: readValue("#siteAboutLibraryDescription"),
+      ctaEyebrow: readValue("#siteAboutCtaEyebrow"),
+      ctaTitle: readValue("#siteAboutCtaTitle"),
+      ctaButtonText: readValue("#siteAboutCtaButtonText")
     },
     contact: {
       eyebrow: readValue("#siteContactEyebrow"),
@@ -2564,10 +2523,10 @@ siteContentForm.addEventListener("submit", async (event) => {
     saveState();
     renderSiteContent();
     populateSiteEditor();
-    notify("Los cambios se han guardado en Supabase y ya se veran en todos los dispositivos.");
+    notify("La web se ha guardado con exito.");
   } catch (error) {
     console.error("Could not save site content:", error);
-    notify(`No se pudieron guardar los cambios: ${error.message || "revisa el almacenamiento"}`);
+    notify("No se pudieron guardar los cambios. Intentalo de nuevo.");
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Guardar cambios de la web";
@@ -2601,7 +2560,7 @@ profileForm.addEventListener("submit", (event) => {
   updateHeader();
   renderDashboard();
   renderPublicContent();
-  notify("Perfil actualizado.");
+  notify("El perfil se ha guardado con exito.");
 
   getDatabase().then((db) => {
     if (!db) return null;
@@ -2613,7 +2572,7 @@ profileForm.addEventListener("submit", (event) => {
     if (result?.error) throw result.error;
   }).catch((error) => {
     console.error("Could not update profile in Supabase:", error);
-    notify(`Perfil guardado en demo, pero Supabase no actualizo: ${error.message || "revisa permisos"}`);
+    notify("No se pudo sincronizar el perfil. Intentalo de nuevo.");
   });
 });
 
@@ -2731,10 +2690,10 @@ contentForm.addEventListener("submit", async (event) => {
     resetContentEditor();
     renderDashboard();
     renderPublicContent();
-    notify(wasEditing ? "Contenido actualizado en Supabase." : "Contenido publicado en Supabase.");
+    notify("El contenido se ha guardado con exito.");
   } catch (error) {
     console.error("Could not save content in Supabase:", error);
-    notify(`No se pudo guardar en Supabase: ${error.message || "revisa la consulta y los permisos"}`);
+    notify("No se pudo guardar el contenido. Intentalo de nuevo.");
   } finally {
     contentSubmitButton.disabled = false;
     contentSubmitButton.textContent = editingItemId ? "Guardar cambios" : "Guardar contenido";

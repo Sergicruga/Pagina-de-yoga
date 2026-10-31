@@ -63,8 +63,8 @@
         <section class="teacher-intro-band" aria-label="Presentacion de la profesora">
           <div class="teacher-carousel" id="teacherCarousel">
             <div class="teacher-carousel-media">
-              <img id="publicTeacherPhoto" src="assets/profesora-provisional.png" alt="Retrato provisional de la profesora de yoga">
-              <span id="teacherPhotoLabel">Foto provisional</span>
+              <img id="publicTeacherPhoto" src="assets/profesora-provisional.png" alt="Retrato de la profesora de yoga">
+              <span id="teacherPhotoLabel">Miriam</span>
             </div>
             <div class="teacher-carousel-content">
               <p class="eyebrow">Conoce a tu profesora</p>
@@ -129,20 +129,20 @@
       <section class="view content-band" id="view-sobre" data-view="sobre" hidden>
         <div class="section-heading">
           <p class="eyebrow" id="aboutEyebrow">La profesora</p>
-          <h2 id="aboutTitle">Una guia cercana para practicar a tu ritmo</h2>
+          <h2 id="aboutTitle">Yoga, respiracion y bienestar con cercania</h2>
         </div>
         <div class="teacher-profile">
           <div class="teacher-photo">
             <img id="aboutTeacherPhoto" src="assets/profesora-provisional.png" alt="Retrato de la profesora de yoga">
-            <span id="aboutPhotoLabel">Profesora</span>
+            <span id="aboutPhotoLabel">Miriam</span>
           </div>
           <div class="teacher-copy">
-            <p class="lead" id="aboutLead">Este espacio esta preparado para presentar a Miriam, su metodo, su experiencia y el tipo de practica que quiere compartir.</p>
-            <p id="aboutBody">La idea es que la pagina transmita calma, confianza y profesionalidad.</p>
+            <p class="lead" id="aboutLead">Soy Miriam y acompano a personas que quieren cuidarse mediante una practica consciente, cercana y respetuosa con su propio ritmo.</p>
+            <p id="aboutBody">En este espacio encontraras propuestas para moverte, respirar y crear momentos de calma que puedas integrar en tu vida cotidiana.</p>
             <div class="teacher-stats">
-              <div><strong id="aboutStatValue1">+120</strong><span id="aboutStatLabel1">clases guiadas</span></div>
-              <div><strong id="aboutStatValue2">4</strong><span id="aboutStatLabel2">areas de practica</span></div>
-              <div><strong id="aboutStatValue3">Online</strong><span id="aboutStatLabel3">desde casa</span></div>
+              <div><strong id="aboutStatValue1">Yoga</strong><span id="aboutStatLabel1">movimiento consciente</span></div>
+              <div><strong id="aboutStatValue2">Respira</strong><span id="aboutStatLabel2">practicas de calma</span></div>
+              <div><strong id="aboutStatValue3">Online</strong><span id="aboutStatLabel3">desde donde estes</span></div>
             </div>
           </div>
         </div>
@@ -170,10 +170,10 @@
         </section>
         <div class="teacher-cta">
           <div>
-            <p class="eyebrow">Zona privada</p>
-            <h3>Miriam podra publicar videos, audios, libros, pensamientos y packs desde su panel</h3>
+            <p class="eyebrow" id="aboutCtaEyebrow">Empieza a practicar</p>
+            <h3 id="aboutCtaTitle">Descubre las clases y contenidos disponibles</h3>
           </div>
-          <button class="primary-button" type="button" data-route="dashboard">Ver panel demo</button>
+          <button class="primary-button" id="aboutCtaButton" type="button" data-route="contenido">Ver contenido</button>
         </div>
       </section>
 
@@ -428,7 +428,7 @@
                   <img id="siteTeacherPhotoPreview" src="assets/profesora-provisional.png" alt="Vista previa de la foto de la profesora">
                   <div>
                     <label>Cambiar fotografia<input id="siteTeacherPhoto" type="file" accept="image/*"></label>
-                    <button class="secondary-button" id="resetTeacherPhotoButton" type="button">Usar foto provisional</button>
+                    <button class="secondary-button" id="resetTeacherPhotoButton" type="button">Usar foto por defecto</button>
                   </div>
                 </div>
                 <div class="site-editor-slide">
@@ -450,6 +450,7 @@
 
               <section class="site-editor-section">
                 <h4>Pagina Sobre mi</h4>
+                <label>Texto sobre la fotografia<input id="siteAboutPhotoLabel" type="text" required></label>
                 <label>Etiqueta superior<input id="siteAboutEyebrow" type="text" required></label>
                 <label>Titulo principal<input id="siteAboutTitle" type="text" required></label>
                 <label>Texto destacado<textarea id="siteAboutLead" rows="3" required></textarea></label>
@@ -480,19 +481,25 @@
                 <label>Etiqueta de libros y reflexiones<input id="siteAboutLibraryEyebrow" type="text" required></label>
                 <label>Titulo de libros y reflexiones<input id="siteAboutLibraryTitle" type="text" required></label>
                 <label>Descripcion de libros y reflexiones<textarea id="siteAboutLibraryDescription" rows="3" required></textarea></label>
+                <div class="site-editor-slide">
+                  <h5>Bloque final</h5>
+                  <label>Etiqueta<input id="siteAboutCtaEyebrow" type="text" required></label>
+                  <label>Titulo<input id="siteAboutCtaTitle" type="text" required></label>
+                  <label>Texto del boton<input id="siteAboutCtaButtonText" type="text" required></label>
+                </div>
               </section>
 
               <section class="site-editor-section">
-                <h4>Pagina de contacto</h4>
+                <h4>Contacto y recepcion de consultas</h4>
                 <label>Etiqueta superior<input id="siteContactEyebrow" type="text" required></label>
                 <label>Titulo<input id="siteContactTitle" type="text" required></label>
                 <label>Presentacion<textarea id="siteContactIntro" rows="3" required></textarea></label>
                 <div class="form-grid">
-                  <label>Email de contacto<input id="siteContactEmail" type="email" placeholder="hola@tudominio.com"></label>
+                  <label>Email donde recibiras las consultas<input id="siteContactEmail" type="email" placeholder="hola@tudominio.com"></label>
                   <label>Telefono visible<input id="siteContactPhone" type="tel" placeholder="+34 600 000 000"></label>
                   <label>WhatsApp<input id="siteContactWhatsapp" type="tel" placeholder="34600000000"></label>
                 </div>
-                <p class="form-help">El formulario abrira el correo del visitante con el mensaje preparado. Introduce al menos un email para activarlo.</p>
+                <p class="form-help">Las consultas se prepararan para enviarse a este correo. Introduce al menos un email para activar el formulario.</p>
               </section>
 
               <section class="site-editor-section">
@@ -541,13 +548,13 @@
     <dialog class="auth-dialog" id="authDialog">
       <form method="dialog" class="auth-card" id="authForm">
         <button class="icon-button" id="closeAuthButton" type="button" aria-label="Cerrar">x</button>
-        <p class="eyebrow" id="authEyebrow">Acceso demo</p>
+        <p class="eyebrow" id="authEyebrow">Acceso privado</p>
         <h2 id="authTitle">Iniciar sesion</h2>
         <p class="auth-helper" id="authHelper">Entra con tu email para acceder a tu espacio privado.</p>
         <label class="register-only">Nombre<input id="nameInput" type="text" placeholder="Tu nombre"></label>
-        <label>Email<input id="emailInput" type="email" value="alumna@demo.com"></label>
-        <label>Contraseña<input id="passwordInput" type="password" autocomplete="current-password" placeholder="Tu contraseña"></label>
-        <p class="auth-note" id="authNote">Demo: usa profesora@demo.com para entrar como profesora.</p>
+        <label>Email<input id="emailInput" type="email" autocomplete="email" placeholder="tu@email.com" required></label>
+        <label>Contraseña<input id="passwordInput" type="password" autocomplete="current-password" placeholder="Tu contraseña" required></label>
+        <p class="auth-note" id="authNote">Introduce los datos de tu cuenta para continuar.</p>
         <button class="primary-button" id="authSubmitButton" type="submit">Entrar</button>
         <button class="auth-mode-toggle" id="authModeToggle" type="button">Crear una cuenta nueva</button>
       </form>
