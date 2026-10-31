@@ -274,7 +274,6 @@
         </div>
         <div class="contact-layout">
           <div class="contact-details" id="contactDetails">
-            <a id="contactEmailLink" href="#" hidden></a>
             <a id="contactPhoneLink" href="#" hidden></a>
             <a id="contactWhatsappLink" href="#" target="_blank" rel="noopener" hidden>Escribir por WhatsApp</a>
           </div>
@@ -282,7 +281,8 @@
             <label>Nombre<input id="contactName" type="text" autocomplete="name" placeholder="Tu nombre" required></label>
             <label>Email<input id="contactReplyEmail" type="email" autocomplete="email" placeholder="tu@email.com" required></label>
             <label>Mensaje<textarea id="contactMessage" rows="5" placeholder="Cuentame que necesitas" required></textarea></label>
-            <button class="primary-button" type="submit">Enviar consulta</button>
+            <label class="contact-honeypot" aria-hidden="true">Sitio web<input id="contactWebsite" type="text" tabindex="-1" autocomplete="off"></label>
+            <button class="primary-button" id="contactSubmitButton" type="submit">Enviar consulta</button>
             <p class="contact-status" id="contactStatus" aria-live="polite"></p>
           </form>
         </div>
@@ -495,11 +495,10 @@
                 <label>Titulo<input id="siteContactTitle" type="text" required></label>
                 <label>Presentacion<textarea id="siteContactIntro" rows="3" required></textarea></label>
                 <div class="form-grid">
-                  <label>Email donde recibiras las consultas<input id="siteContactEmail" type="email" placeholder="hola@tudominio.com"></label>
                   <label>Telefono visible<input id="siteContactPhone" type="tel" placeholder="+34 600 000 000"></label>
                   <label>WhatsApp<input id="siteContactWhatsapp" type="tel" placeholder="34600000000"></label>
                 </div>
-                <p class="form-help">Las consultas se prepararan para enviarse a este correo. Introduce al menos un email para activar el formulario.</p>
+                <p class="form-help">El correo que recibe las consultas se mantiene privado y se configura de forma segura en el servidor.</p>
               </section>
 
               <section class="site-editor-section">

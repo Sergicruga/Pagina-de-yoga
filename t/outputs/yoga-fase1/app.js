@@ -102,7 +102,6 @@ const defaultSiteContent = {
     eyebrow: "Contacto",
     title: "Reserva y dudas",
     intro: "Escribeme para resolver tus dudas o encontrar la practica que mejor encaja contigo.",
-    email: "",
     phone: "",
     whatsapp: ""
   },
@@ -178,10 +177,10 @@ const siteTeacherPhotoPreview = document.querySelector("#siteTeacherPhotoPreview
 const resetTeacherPhotoButton = document.querySelector("#resetTeacherPhotoButton");
 const contactForm = document.querySelector("#contactForm");
 const contactDetails = document.querySelector("#contactDetails");
-const contactEmailLink = document.querySelector("#contactEmailLink");
 const contactPhoneLink = document.querySelector("#contactPhoneLink");
 const contactWhatsappLink = document.querySelector("#contactWhatsappLink");
 const contactStatus = document.querySelector("#contactStatus");
+const contactSubmitButton = document.querySelector("#contactSubmitButton");
 const subscriptionPlanContainers = [
   document.querySelector("#publicSubscriptionPlans"),
   document.querySelector("#dashboardSubscriptionPlans")
@@ -225,6 +224,7 @@ function loadState() {
 function normalizeSiteContent(savedContent = {}) {
   const savedSlides = Array.isArray(savedContent.teacherSlides) ? savedContent.teacherSlides : [];
   const savedServices = savedContent.services || {};
+  const savedContact = savedContent.contact || {};
   const hasCurrentBranding = Number(savedContent.brandingVersion || 0) >= defaultSiteContent.brandingVersion;
   const savedAbout = hasCurrentBranding ? savedContent.about || {} : {};
   const savedStats = Array.isArray(savedAbout.stats) ? savedAbout.stats : [];
@@ -254,8 +254,11 @@ function normalizeSiteContent(savedContent = {}) {
       }))
     },
     contact: {
-      ...defaultSiteContent.contact,
-      ...(savedContent.contact || {})
+      eyebrow: savedContact.eyebrow ?? defaultSiteContent.contact.eyebrow,
+      title: savedContact.title ?? defaultSiteContent.contact.title,
+      intro: savedContact.intro ?? defaultSiteContent.contact.intro,
+      phone: savedContact.phone ?? defaultSiteContent.contact.phone,
+      whatsapp: savedContact.whatsapp ?? defaultSiteContent.contact.whatsapp
     },
     services: Object.fromEntries(Object.entries(defaultSiteContent.services).map(([key, service]) => [
       key,
@@ -1161,17 +1164,16 @@ function renderSiteContent() {
   document.querySelector("#contactTitle").textContent = contact.title;
   document.querySelector("#contactIntro").textContent = contact.intro;
 
-  contactEmailLink.hidden = !contact.email;
-  contactEmailLink.href = contact.email ? `mailto:${contact.email}` : "#";
-  contactEmailLink.textContent = contact.email || "";
   contactPhoneLink.hidden = !contact.phone;
   contactPhoneLink.href = contact.phone ? `tel:${contact.phone.replace(/\s+/g, "")}` : "#";
   contactPhoneLink.textContent = contact.phone || "";
   const whatsappNumber = String(contact.whatsapp || "").replace(/\D/g, "");
   contactWhatsappLink.hidden = !whatsappNumber;
   contactWhatsappLink.href = whatsappNumber ? `https://wa.me/${whatsappNumber}` : "#";
-  contactDetails.hidden = !contact.email && !contact.phone && !whatsappNumber;
-  contactStatus.textContent = contact.email ? "" : "La profesora publicara aqui su email de contacto.";
+  const hasPublicContactDetails = Boolean(contact.phone || whatsappNumber);
+  contactDetails.hidden = !hasPublicContactDetails;
+  document.querySelector(".contact-layout").classList.toggle("single-column", !hasPublicContactDetails);
+  contactStatus.textContent = "";
 
   const currentRoute = window.location.hash.replace("#", "");
   const serviceKey = currentRoute.startsWith("servicio-") ? currentRoute.replace("servicio-", "") : null;
@@ -1212,7 +1214,6 @@ function populateSiteEditor() {
   document.querySelector("#siteContactEyebrow").value = contact.eyebrow;
   document.querySelector("#siteContactTitle").value = contact.title;
   document.querySelector("#siteContactIntro").value = contact.intro;
-  document.querySelector("#siteContactEmail").value = contact.email;
   document.querySelector("#siteContactPhone").value = contact.phone;
   document.querySelector("#siteContactWhatsapp").value = contact.whatsapp;
 
@@ -2422,22 +2423,35 @@ resetTeacherPhotoButton.addEventListener("click", async () => {
   }
 });
 
-contactForm.addEventListener("submit", (event) => {
+contactForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const destination = state.siteContent.contact.email.trim();
-  if (!destination) {
-    contactStatus.textContent = "El email de contacto todavia no esta configurado.";
-    notify("La profesora debe configurar un email de contacto.");
-    return;
-  }
-
   const name = document.querySelector("#contactName").value.trim();
   const replyEmail = document.querySelector("#contactReplyEmail").value.trim();
   const message = document.querySelector("#contactMessage").value.trim();
-  const subject = encodeURIComponent(`Consulta desde Reset de Conciencia - ${name}`);
-  const body = encodeURIComponent(`Nombre: ${name}\nEmail de respuesta: ${replyEmail}\n\n${message}`);
-  contactStatus.textContent = "Abriendo tu aplicacion de correo...";
-  window.location.href = `mailto:${destination}?subject=${subject}&body=${body}`;
+  const website = document.querySelector("#contactWebsite").value.trim();
+  contactSubmitButton.disabled = true;
+  contactSubmitButton.textContent = "Enviando...";
+  contactStatus.textContent = "Enviando tu consulta...";
+
+  try {
+    const response = await fetch("/api/send-contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, replyEmail, message, website })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || "No se pudo enviar la consulta.");
+
+    contactForm.reset();
+    contactStatus.textContent = "Tu consulta se ha enviado con exito. Te responderemos lo antes posible.";
+    notify("La consulta se ha enviado con exito.");
+  } catch (error) {
+    console.error("Could not send contact form:", error);
+    contactStatus.textContent = error.message || "No se pudo enviar la consulta. Intentalo de nuevo.";
+  } finally {
+    contactSubmitButton.disabled = false;
+    contactSubmitButton.textContent = "Enviar consulta";
+  }
 });
 
 siteContentForm.addEventListener("submit", async (event) => {
@@ -2487,7 +2501,6 @@ siteContentForm.addEventListener("submit", async (event) => {
       eyebrow: readValue("#siteContactEyebrow"),
       title: readValue("#siteContactTitle"),
       intro: readValue("#siteContactIntro"),
-      email: readValue("#siteContactEmail").toLowerCase(),
       phone: readValue("#siteContactPhone"),
       whatsapp: readValue("#siteContactWhatsapp")
     },
