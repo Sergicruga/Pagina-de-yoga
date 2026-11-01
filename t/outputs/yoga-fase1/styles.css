@@ -71,11 +71,10 @@ select {
 
 .brand-logo {
   display: block;
-  width: 68px;
-  height: 54px;
+  width: 64px;
+  height: 64px;
   border-radius: 4px;
-  background: #000000;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .brand-name {
@@ -1426,8 +1425,8 @@ audio.dialog-media {
   }
 
   .brand-logo {
-    width: 60px;
-    height: 48px;
+    width: 54px;
+    height: 54px;
   }
 
   .main-nav {
