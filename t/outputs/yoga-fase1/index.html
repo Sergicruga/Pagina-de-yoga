@@ -536,7 +536,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Usuario</th><th>Rol</th><th>Premium</th><th>Accion</th></tr>
+                  <tr><th>Usuario</th><th>Rol</th><th>Premium</th><th>Acciones</th></tr>
                 </thead>
                 <tbody id="userRows"></tbody>
               </table>
@@ -558,6 +558,22 @@
         <p class="auth-note" id="authNote">Introduce los datos de tu cuenta para continuar.</p>
         <button class="primary-button" id="authSubmitButton" type="submit">Entrar</button>
         <button class="auth-mode-toggle" id="authModeToggle" type="button">Crear una cuenta nueva</button>
+      </form>
+    </dialog>
+
+    <dialog class="auth-dialog" id="deleteUserDialog">
+      <form class="auth-card delete-user-card" id="deleteUserForm">
+        <button class="icon-button" id="closeDeleteUserButton" type="button" aria-label="Cerrar">x</button>
+        <p class="eyebrow">Gestion de usuarios</p>
+        <h2>Eliminar cuenta</h2>
+        <p id="deleteUserSummary"></p>
+        <label>Contraseña de la profesora<input id="deleteUserPassword" type="password" autocomplete="current-password" required></label>
+        <p class="auth-note">Esta accion elimina el acceso y las compras asociadas. No se puede deshacer.</p>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="cancelDeleteUserButton" type="button">Cancelar</button>
+          <button class="danger-button" id="confirmDeleteUserButton" type="submit">Eliminar usuario</button>
+        </div>
+        <p class="dialog-status" id="deleteUserStatus" aria-live="polite"></p>
       </form>
     </dialog>
 

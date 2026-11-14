@@ -4,10 +4,8 @@ const checkoutStorageKey = "reset-checkout-return";
 const seedItems = [];
 const legacySampleItemIds = new Set(["item-1", "item-2", "item-3", "item-4"]);
 
-const seedUsers = [
-  { email: "mirylab82@gmail.com", name: "Miriam", passwordHash: "Rocket.0#", role: "teacher", premium: true, purchases: [] }
-];
-const legacySampleUserEmails = new Set(["alumna@demo.com", "premium@demo.com"]);
+const seedUsers = [];
+const legacySampleUserEmails = new Set(["alumna@demo.com", "premium@demo.com", "profesora@demo.com"]);
 
 const serviceDetails = {
   yoga: {
@@ -135,6 +133,14 @@ const navLinks = [...document.querySelectorAll(".main-nav a")];
 const authDialog = document.querySelector("#authDialog");
 const authForm = document.querySelector("#authForm");
 const closeAuthButton = document.querySelector("#closeAuthButton");
+const deleteUserDialog = document.querySelector("#deleteUserDialog");
+const deleteUserForm = document.querySelector("#deleteUserForm");
+const closeDeleteUserButton = document.querySelector("#closeDeleteUserButton");
+const cancelDeleteUserButton = document.querySelector("#cancelDeleteUserButton");
+const deleteUserSummary = document.querySelector("#deleteUserSummary");
+const deleteUserPassword = document.querySelector("#deleteUserPassword");
+const deleteUserStatus = document.querySelector("#deleteUserStatus");
+const confirmDeleteUserButton = document.querySelector("#confirmDeleteUserButton");
 const loginButton = document.querySelector("#loginButton");
 const registerButton = document.querySelector("#registerButton");
 const logoutButton = document.querySelector("#logoutButton");
@@ -206,6 +212,7 @@ let pendingSitePhotoPreviewUrl = null;
 let pendingSubscriptionPlan = null;
 let loadedSubscriptionPlans = [];
 let subscriptionPlansError = "";
+let pendingDeleteUserId = null;
 
 function loadState() {
   const saved = localStorage.getItem(storageKey);
@@ -1027,7 +1034,17 @@ async function syncUsersFromDatabase() {
 
     if (error) throw error;
 
-    data.forEach((row) => upsertLocalUser(userFromDatabase(row)));
+    const existingUsers = new Map(state.users.map((user) => [user.email, user]));
+    const databaseUsers = data.map((row) => {
+      const databaseUser = userFromDatabase(row);
+      return {
+        ...databaseUser,
+        purchases: existingUsers.get(databaseUser.email)?.purchases || []
+      };
+    });
+    const databaseEmails = new Set(databaseUsers.map((user) => user.email));
+    const localOnlyUsers = state.users.filter((user) => !user.id && !databaseEmails.has(user.email));
+    state.users = [...databaseUsers, ...localOnlyUsers];
     saveState();
     renderUserRows();
   } catch (error) {
@@ -1352,7 +1369,7 @@ function renderDashboard() {
   const user = currentUser();
   const teacher = isTeacher();
   const displayName = user.name || user.email;
-  document.querySelector("#sidebarTitle").textContent = teacher ? "Gestion" : "Mi espacio";
+  document.querySelector("#sidebarTitle").textContent = teacher ? "Panel" : "Mi espacio";
   document.querySelector("#welcomeTitle").textContent = teacher ? "Gestion de contenidos" : `Hola, ${displayName}`;
   document.querySelector("#sessionRole").textContent = teacher ? "Administracion" : "Alumna/o";
   document.querySelector("#premiumStatus").hidden = teacher;
@@ -1485,11 +1502,41 @@ function renderUserRows() {
   userRows.innerHTML = visibleUsers.length ? visibleUsers.map((user) => `
     <tr>
       <td>${escapeHtml(user.name || user.email)}<br><small>${escapeHtml(user.email)}</small></td>
-      <td>${user.role === "teacher" ? "Profesora" : "Alumna/o"}</td>
+      <td>${user.role === "teacher" ? "Profesora" : user.role === "admin" ? "Administracion" : "Alumna/o"}</td>
       <td>${user.premium ? "Si" : "No"}</td>
-      <td><button class="secondary-button" type="button" data-toggle-user="${user.email}">${user.premium ? "Quitar" : "Dar"} premium</button></td>
+      <td>
+        ${["teacher", "admin"].includes(user.role)
+          ? '<span class="protected-account">Cuenta protegida</span>'
+          : `<div class="table-actions">
+              <button class="secondary-button" type="button" data-toggle-user="${escapeHtml(user.email)}">${user.premium ? "Quitar" : "Dar"} premium</button>
+              <button class="danger-button" type="button" data-delete-user="${escapeHtml(user.id)}">Eliminar</button>
+            </div>`}
+      </td>
     </tr>
   `).join("") : '<tr><td colspan="4">Todavia no hay usuarios registrados.</td></tr>';
+}
+
+function openDeleteUserDialog(user) {
+  if (!user || ["teacher", "admin"].includes(user.role)) {
+    notify("La cuenta de la profesora esta protegida y no se puede eliminar.");
+    return;
+  }
+
+  pendingDeleteUserId = user.id;
+  deleteUserSummary.textContent = `Vas a eliminar la cuenta de ${user.name || user.email} (${user.email}).`;
+  deleteUserPassword.value = "";
+  deleteUserStatus.textContent = "";
+  confirmDeleteUserButton.disabled = false;
+  confirmDeleteUserButton.textContent = "Eliminar usuario";
+  deleteUserDialog.showModal();
+  deleteUserPassword.focus();
+}
+
+function closeDeleteUserDialog() {
+  pendingDeleteUserId = null;
+  deleteUserPassword.value = "";
+  deleteUserStatus.textContent = "";
+  if (deleteUserDialog.open) deleteUserDialog.close();
 }
 
 function showPanel(panelName) {
@@ -1545,17 +1592,6 @@ async function login(email, password) {
     openAuthDialog("register");
     document.querySelector("#emailInput").value = normalizedEmail;
     return;
-  }
-
-  const savedLocalUser = state.users.find((entry) => entry.email === normalizedEmail);
-  if (authMode === "login" && savedLocalUser) {
-    if (savedLocalUser.passwordHash && savedLocalUser.passwordHash !== passwordHash) {
-      notify("Contraseña incorrecta.");
-      openAuthDialog("login");
-      document.querySelector("#emailInput").value = normalizedEmail;
-      return;
-    }
-    user = savedLocalUser;
   }
 
   try {
@@ -2247,6 +2283,18 @@ document.body.addEventListener("click", async (event) => {
     }
   }
 
+  const deleteUserButton = event.target.closest("[data-delete-user]");
+  if (deleteUserButton) {
+    if (!isTeacher()) {
+      notify("Solo la profesora puede eliminar usuarios.");
+      return;
+    }
+
+    const user = state.users.find((entry) => entry.id === deleteUserButton.dataset.deleteUser);
+    openDeleteUserDialog(user);
+    return;
+  }
+
   const toggleUser = event.target.closest("[data-toggle-user]");
   if (toggleUser) {
     const user = state.users.find((entry) => entry.email === toggleUser.dataset.toggleUser);
@@ -2291,6 +2339,61 @@ authModeToggle.addEventListener("click", () => {
   openAuthDialog(authMode === "register" ? "login" : "register");
   document.querySelector("#emailInput").value = email;
   document.querySelector("#nameInput").value = name;
+});
+closeDeleteUserButton.addEventListener("click", closeDeleteUserDialog);
+cancelDeleteUserButton.addEventListener("click", closeDeleteUserDialog);
+deleteUserDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeDeleteUserDialog();
+});
+deleteUserDialog.addEventListener("click", (event) => {
+  if (event.target === deleteUserDialog) closeDeleteUserDialog();
+});
+deleteUserForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const teacher = currentUser();
+  const targetUser = state.users.find((user) => user.id === pendingDeleteUserId);
+  const password = deleteUserPassword.value;
+
+  if (!teacher || teacher.role !== "teacher" || !targetUser) {
+    deleteUserStatus.textContent = "No se pudo identificar la cuenta que quieres eliminar.";
+    return;
+  }
+
+  if (!password) {
+    deleteUserStatus.textContent = "Introduce tu contraseña para confirmar.";
+    deleteUserPassword.focus();
+    return;
+  }
+
+  confirmDeleteUserButton.disabled = true;
+  confirmDeleteUserButton.textContent = "Eliminando...";
+  deleteUserStatus.textContent = "Comprobando la cuenta...";
+
+  try {
+    const response = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actorEmail: teacher.email,
+        password,
+        targetUserId: targetUser.id
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || "No se pudo eliminar la cuenta.");
+
+    state.users = state.users.filter((user) => user.id !== targetUser.id);
+    saveState();
+    renderUserRows();
+    closeDeleteUserDialog();
+    notify("La cuenta se ha eliminado con exito.");
+  } catch (error) {
+    console.error("Could not delete user:", error);
+    deleteUserStatus.textContent = error.message || "No se pudo eliminar la cuenta.";
+    confirmDeleteUserButton.disabled = false;
+    confirmDeleteUserButton.textContent = "Eliminar usuario";
+  }
 });
 closeMediaButton.addEventListener("click", closeMediaViewer);
 mediaDialog.addEventListener("click", (event) => {

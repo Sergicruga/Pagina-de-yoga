@@ -117,6 +117,7 @@ select {
 .primary-button,
 .secondary-button,
 .ghost-button,
+.danger-button,
 .side-link {
   min-height: 42px;
   border: 0;
@@ -139,6 +140,11 @@ select {
 .ghost-button {
   background: transparent;
   color: var(--sage-dark);
+}
+
+.danger-button {
+  background: #a34c45;
+  color: white;
 }
 
 .view {
@@ -1028,6 +1034,13 @@ audio.media-player {
   border-radius: 8px;
 }
 
+.sidebar h2 {
+  max-width: 100%;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  overflow-wrap: normal;
+}
+
 .side-link {
   width: 100%;
   text-align: left;
@@ -1053,6 +1066,10 @@ audio.media-player {
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 20px;
+}
+
+.workspace-top h2 {
+  font-size: clamp(2.1rem, 3.5vw, 3.25rem);
 }
 
 .compact {
@@ -1122,6 +1139,33 @@ th {
   display: grid;
   gap: 15px;
   padding: 28px;
+}
+
+.delete-user-card h2 {
+  padding-right: 44px;
+  font-size: clamp(2rem, 6vw, 3.4rem);
+}
+
+.dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialog-actions button {
+  width: 100%;
+}
+
+.dialog-status {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--muted);
+}
+
+.protected-account {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .media-dialog-card {
