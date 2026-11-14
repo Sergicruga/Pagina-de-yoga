@@ -5,7 +5,7 @@ const seedItems = [];
 const legacySampleItemIds = new Set(["item-1", "item-2", "item-3", "item-4"]);
 
 const seedUsers = [
-  { email: "profesora@demo.com", name: "Miriam", passwordHash: "demo:demo123", role: "teacher", premium: true, purchases: [] }
+  { email: "mirylab82@gmail.com", name: "Miriam", passwordHash: "Rocket.0#", role: "teacher", premium: true, purchases: [] }
 ];
 const legacySampleUserEmails = new Set(["alumna@demo.com", "premium@demo.com"]);
 
