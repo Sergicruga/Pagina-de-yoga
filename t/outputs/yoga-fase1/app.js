@@ -185,6 +185,9 @@ const views = [...document.querySelectorAll("[data-view]")];
 const navLinks = [...document.querySelectorAll(".main-nav a")];
 const authDialog = document.querySelector("#authDialog");
 const authForm = document.querySelector("#authForm");
+const forgotPasswordButton = document.querySelector("#forgotPasswordButton");
+const passwordRecoveryDialog = document.querySelector("#passwordRecoveryDialog");
+const passwordRecoveryForm = document.querySelector("#passwordRecoveryForm");
 const closeAuthButton = document.querySelector("#closeAuthButton");
 const deleteUserDialog = document.querySelector("#deleteUserDialog");
 const deleteUserForm = document.querySelector("#deleteUserForm");
@@ -275,6 +278,7 @@ const fallbackSubscriptionPlans = [
 let loadedSubscriptionPlans = fallbackSubscriptionPlans.map((plan) => ({ ...plan }));
 let subscriptionPlansError = "";
 let pendingDeleteUserId = null;
+let authListenerRegistered = false;
 
 function loadState() {
   const saved = localStorage.getItem(storageKey);
@@ -303,7 +307,7 @@ function normalizeSiteContent(savedContent = {}) {
     brandingVersion: defaultSiteContent.brandingVersion,
     heroTitle: hasCurrentBranding ? savedContent.heroTitle ?? defaultSiteContent.heroTitle : defaultSiteContent.heroTitle,
     heroDescription: hasCurrentBranding ? savedContent.heroDescription ?? defaultSiteContent.heroDescription : defaultSiteContent.heroDescription,
-    teacherPhotoCustom: Boolean(savedContent.teacherPhotoCustom || savedContent.teacherPhotoUrl),
+    teacherPhotoCustom: Boolean(savedContent.teacherPhotoCustom || savedContent.teacherPhotoUrl || savedContent.teacherPhotoStoragePath),
     teacherPhotoUrl: String(savedContent.teacherPhotoUrl || ""),
     teacherPhotoStoragePath: String(savedContent.teacherPhotoStoragePath || ""),
     teacherSlides: defaultSiteContent.teacherSlides.map((slide, index) => ({
@@ -365,11 +369,13 @@ function normalizeState(savedState) {
     })),
     users: mergedUsers.map((user) => {
       const seedUser = seedUsers.find((entry) => entry.email === user.email);
+      const safeUser = { ...user };
+      delete safeUser.passwordHash;
+      delete safeUser.password_hash;
 
       return {
-        ...user,
+        ...safeUser,
         name: user.name || user.full_name || seedUser?.name || "",
-        passwordHash: user.passwordHash || user.password_hash || seedUser?.passwordHash || "",
         purchases: user.purchases || [],
         purchaseExpirations: user.purchaseExpirations || {}
       };
@@ -443,15 +449,14 @@ async function startStripeCheckout(purchaseType, item, button, subscriptionPlanI
 
   try {
     rememberCheckout(user, purchaseType, item, subscriptionPlanId);
+    const headers = await authenticatedHeaders({ "Content-Type": "application/json" });
     const response = await fetch("/api/create-checkout-session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         purchaseType,
         lessonId: item?.databaseId || null,
-        subscriptionPlanId,
-        userId: user.id || null,
-        email: user.email
+        subscriptionPlanId
       })
     });
     const result = await response.json();
@@ -500,7 +505,8 @@ async function processCheckoutReturn() {
 
   notify("Confirmando el pago con Stripe...");
   try {
-    const response = await fetch(`/api/checkout-status?session_id=${encodeURIComponent(sessionId)}`);
+    const headers = await authenticatedHeaders();
+    const response = await fetch(`/api/checkout-status?session_id=${encodeURIComponent(sessionId)}`, { headers });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "No se pudo confirmar el pago.");
     if (!result.accessGranted) {
@@ -548,6 +554,19 @@ async function processCheckoutReturn() {
 async function getDatabase() {
   if (typeof window.getSupabase !== "function") return null;
   return window.getSupabase();
+}
+
+async function authenticatedHeaders(extraHeaders = {}) {
+  const db = await getDatabase();
+  if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+  const { data, error } = await db.auth.getSession();
+  if (error || !data?.session?.access_token) {
+    throw new Error("Tu sesion ha caducado. Inicia sesion de nuevo.");
+  }
+  return {
+    ...extraHeaders,
+    Authorization: `Bearer ${data.session.access_token}`
+  };
 }
 
 function databaseItemId(databaseId) {
@@ -606,6 +625,12 @@ async function syncSiteContentFromDatabase() {
 
     siteSettingsDatabaseId = data.id;
     state.siteContent = siteContentFromDatabase(data);
+    if (state.siteContent.teacherPhotoStoragePath) {
+      const { data: signedPhoto } = await db.storage
+        .from(supabaseMediaBucket)
+        .createSignedUrl(state.siteContent.teacherPhotoStoragePath, 3600);
+      if (signedPhoto?.signedUrl) state.siteContent.teacherPhotoUrl = signedPhoto.signedUrl;
+    }
     saveState();
     renderSiteContent();
     if (isTeacher() && window.location.hash === "#dashboard") populateSiteEditor();
@@ -644,13 +669,15 @@ async function saveSiteContentToDatabase(siteContent, selectedPhotoFile = null) 
         });
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(uploadedPath);
-      if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica de la fotografia");
+      const { data: signedPhoto, error: signedPhotoError } = await db.storage
+        .from(supabaseMediaBucket)
+        .createSignedUrl(uploadedPath, 3600);
+      if (signedPhotoError || !signedPhoto?.signedUrl) throw signedPhotoError || new Error("No se pudo proteger la fotografia");
 
       nextContent = normalizeSiteContent({
         ...nextContent,
         teacherPhotoCustom: true,
-        teacherPhotoUrl: publicUrlData.publicUrl,
+        teacherPhotoUrl: signedPhoto.signedUrl,
         teacherPhotoStoragePath: uploadedPath
       });
     }
@@ -789,7 +816,6 @@ const lessonSelect = `
   commercial_offer_code,
   access_duration_days,
   included_in_subscription,
-  live_url,
   preview_enabled,
   preview_duration_seconds,
   level,
@@ -798,6 +824,10 @@ const lessonSelect = `
   category,
   is_published,
   created_at,
+  lesson_secrets (
+    live_url,
+    content_body
+  ),
   media (
     id,
     type,
@@ -819,6 +849,9 @@ function itemFromDatabase(row) {
     .sort((first, second) => first.position - second.position);
   const type = inferContentType(row, assets);
   const primaryAsset = assets.find((asset) => asset.type === "video") || assets[0] || null;
+  const lessonSecret = Array.isArray(row.lesson_secrets)
+    ? row.lesson_secrets[0]
+    : row.lesson_secrets;
 
   return {
     id: databaseItemId(row.id),
@@ -827,7 +860,7 @@ function itemFromDatabase(row) {
     storagePath: primaryAsset?.storagePath || null,
     title: row.title,
     description: row.description || "",
-    body: row.body || "",
+    body: lessonSecret?.content_body || row.body || "",
     type,
     category: row.category || (type === "book" || type === "thought" ? "Sobre mi" : "Yoga"),
     level: row.level || "Todos los niveles",
@@ -837,7 +870,7 @@ function itemFromDatabase(row) {
     offerCode: row.commercial_offer_code || "",
     accessDays: normalizeAccessDays(row.access_duration_days),
     includedInSubscription: Boolean(row.included_in_subscription),
-    liveUrl: row.live_url || "",
+    liveUrl: lessonSecret?.live_url || "",
     premium: Boolean(row.is_premium),
     previewEnabled: Boolean(row.preview_enabled),
     previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
@@ -846,6 +879,17 @@ function itemFromDatabase(row) {
     assets,
     hasStoredMedia: assets.some((asset) => Boolean(asset.url))
   };
+}
+
+async function hydrateSignedMediaUrls(db, rows) {
+  await Promise.all((rows || []).flatMap((row) => (row.media || []).map(async (asset) => {
+    if (asset.storage_bucket !== supabaseMediaBucket || !asset.storage_path) return;
+    const { data, error } = await db.storage
+      .from(supabaseMediaBucket)
+      .createSignedUrl(asset.storage_path, 3600);
+    if (!error && data?.signedUrl) asset.url = data.signedUrl;
+  })));
+  return rows || [];
 }
 async function syncContentFromDatabase() {
   try {
@@ -860,6 +904,7 @@ async function syncContentFromDatabase() {
 
     if (error) throw error;
 
+    await hydrateSignedMediaUrls(db, data || []);
     const databaseItems = (data || []).map(itemFromDatabase);
     const localItems = state.items.filter((item) => !item.databaseId && !legacySampleItemIds.has(item.id));
     state.items = databaseItems.length > 0
@@ -881,14 +926,13 @@ async function saveContentToDatabase(item, inputs = {}) {
   const lessonPayload = {
     title: item.title,
     description: item.description || null,
-    body: item.body || null,
+    body: item.premium ? null : item.body || null,
     is_premium: Boolean(item.premium),
     price_individual: Number(item.price || 0),
     content_type: item.type,
     commercial_offer_code: item.offerCode || null,
     access_duration_days: normalizeAccessDays(item.accessDays),
     included_in_subscription: Boolean(item.includedInSubscription),
-    live_url: item.liveUrl || null,
     preview_enabled: Boolean(item.previewEnabled),
     preview_duration_seconds: previewLimitInSeconds(item.previewDuration),
     level: item.level || null,
@@ -989,12 +1033,9 @@ async function saveContentToDatabase(item, inputs = {}) {
       if (uploadError) throw uploadError;
       uploadedPaths.push(storagePath);
 
-      const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(storagePath);
-      if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
-
       newAssets.push({
         type,
-        url: publicUrlData.publicUrl,
+        url: storagePath,
         storageBucket: supabaseMediaBucket,
         storagePath,
         fileName: file.name,
@@ -1008,6 +1049,24 @@ async function saveContentToDatabase(item, inputs = {}) {
   }
 
   try {
+    const secretPayload = {
+      lesson_id: lesson.id,
+      live_url: item.type === "live" ? item.liveUrl || null : null,
+      content_body: item.premium ? item.body || null : null
+    };
+    if (secretPayload.live_url || secretPayload.content_body) {
+      const { error: secretError } = await db
+        .from("lesson_secrets")
+        .upsert(secretPayload, { onConflict: "lesson_id" });
+      if (secretError) throw secretError;
+    } else {
+      const { error: secretDeleteError } = await db
+        .from("lesson_secrets")
+        .delete()
+        .eq("lesson_id", lesson.id);
+      if (secretDeleteError) throw secretDeleteError;
+    }
+
     await prepareUploadedAssets("audio", inputs.audioFiles || [], 1);
     await prepareUploadedAssets("document", inputs.bookFile ? [inputs.bookFile] : [], 100);
 
@@ -1059,6 +1118,7 @@ async function saveContentToDatabase(item, inputs = {}) {
       .eq("id", lesson.id)
       .single();
     if (reloadError) throw reloadError;
+    await hydrateSignedMediaUrls(db, [savedLesson]);
     return itemFromDatabase(savedLesson);
   } catch (error) {
     if (createdMediaIds.length > 0) await db.from("media").delete().in("id", createdMediaIds);
@@ -1087,9 +1147,9 @@ async function deleteContentFromDatabase(item) {
 function userFromDatabase(row) {
   return {
     id: row.id,
+    authUserId: row.auth_user_id || null,
     email: row.email,
     name: row.full_name || "",
-    passwordHash: row.password_hash || "",
     role: row.role || "user",
     premium: Boolean(row.is_premium),
     subscriptionStatus: row.subscription_status || "inactive",
@@ -1123,7 +1183,7 @@ async function syncUsersFromDatabase() {
 
     const { data, error } = await db
       .from("users")
-      .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
+      .select("id,auth_user_id,email,full_name,role,is_premium,subscription_status,premium_until,stripe_customer_id")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -1149,13 +1209,14 @@ async function syncUsersFromDatabase() {
 }
 
 async function syncCurrentUserAccess(user = currentUser()) {
-  if (!user?.id || !user.passwordHash || window.location.protocol === "file:") return;
+  if (!user?.id || window.location.protocol === "file:") return;
 
   try {
+    const headers = await authenticatedHeaders({ "Content-Type": "application/json" });
     const response = await fetch("/api/user-access", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: user.email, passwordHash: user.passwordHash })
+      headers,
+      body: "{}"
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.message || "No se pudo actualizar el acceso.");
@@ -1178,7 +1239,7 @@ async function syncCurrentUserAccess(user = currentUser()) {
 }
 
 function isTeacher() {
-  return currentUser()?.role === "teacher";
+  return ["teacher", "admin"].includes(currentUser()?.role);
 }
 
 function hasActivePurchase(user, item) {
@@ -1190,7 +1251,7 @@ function hasActivePurchase(user, item) {
 function canOpen(item) {
   const user = currentUser();
   return !item.premium
-    || user?.role === "teacher"
+    || ["teacher", "admin"].includes(user?.role)
     || hasActivePurchase(user, item)
     || Boolean(user?.premium && item.includedInSubscription);
 }
@@ -1436,7 +1497,6 @@ function showTeacherSlide(index) {
 function contentCard(item) {
   const user = currentUser();
   const locked = !canOpen(item);
-  const hasPreview = item.previewEnabled;
   const hasIndividualPrice = item.premium && item.price > 0;
   const canBuySingle = locked && hasIndividualPrice && Boolean(item.databaseId);
   const typeLabel = contentTypeLabel(item.type);
@@ -1455,6 +1515,8 @@ function contentCard(item) {
     : item.premium ? boughtSingle ? "Comprado" : subscriptionAccess ? "Incluido en suscripcion" : "Acceso activo" : "Gratis";
   const purchaseExpiry = boughtSingle ? user.purchaseExpirations?.[item.id] : null;
   const assets = normalizeItemAssets(item);
+  const hasPreview = item.previewEnabled
+    && assets.some((asset) => ["video", "audio"].includes(asset.type) && asset.url);
   const videoAsset = assets.find((asset) => asset.type === "video");
   const audioAsset = assets.find((asset) => asset.type === "audio");
   const localMediaUrl = mediaUrls.get(item.id);
@@ -1485,7 +1547,7 @@ function contentCard(item) {
         <span class="chip">${escapeHtml(item.category)}</span>
         <span class="chip">${escapeHtml(item.level)}</span>
         <span class="chip ${item.premium ? "premium" : ""}">${escapeHtml(accessText)}</span>
-        ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "2 min")}</span>` : ""}
+        ${hasPreview ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "2 min")}</span>` : ""}
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
         ${item.accessDays > 0 ? `<span class="chip">Acceso ${escapeHtml(String(item.accessDays))} dias</span>` : ""}
       </div>
@@ -1740,130 +1802,23 @@ function openDashboardPanel(panelName) {
   showPanel(panelName);
 }
 
-function demoPasswordHash(password) {
-  return `demo:${password}`;
+async function profileForAuthUser(db, authUser) {
+  const { data, error } = await db
+    .from("users")
+    .select("id,auth_user_id,email,full_name,role,is_premium,subscription_status,premium_until,stripe_customer_id")
+    .eq("auth_user_id", authUser.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("No se encontro el perfil asociado a esta cuenta.");
+  return userFromDatabase(data);
 }
 
-async function login(email, password) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const fullName = document.querySelector("#nameInput").value.trim();
-  const passwordHash = demoPasswordHash(password);
-  let user = null;
-
-  if (!password) {
-    notify("Introduce una contraseña.");
-    openAuthDialog(authMode);
-    document.querySelector("#emailInput").value = normalizedEmail;
-    return;
-  }
-
-  if (authMode === "register" && !fullName) {
-    notify("Introduce tu nombre para crear la cuenta.");
-    openAuthDialog("register");
-    document.querySelector("#emailInput").value = normalizedEmail;
-    return;
-  }
-
-  try {
-    const db = await getDatabase();
-    if (db) {
-      const { data: existingUser, error: findError } = await db
-        .from("users")
-        .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
-        .eq("email", normalizedEmail)
-        .maybeSingle();
-
-      if (findError) throw findError;
-
-      if (authMode === "register") {
-        if (existingUser) {
-          user = userFromDatabase(existingUser);
-          if (user.passwordHash && user.passwordHash !== passwordHash) {
-            notify("Esta cuenta ya existe. Inicia sesion con su contraseña.");
-            openAuthDialog("login");
-            document.querySelector("#emailInput").value = normalizedEmail;
-            return;
-          }
-          notify("Esta cuenta ya existia. Hemos iniciado sesion.");
-        } else {
-          const { data: createdUser, error: insertError } = await db
-            .from("users")
-            .insert({
-              email: normalizedEmail,
-              full_name: fullName,
-              password_hash: passwordHash,
-              role: "user",
-              is_premium: false,
-              last_login_at: new Date().toISOString()
-            })
-            .select("id,email,full_name,password_hash,role,is_premium,subscription_status,premium_until,stripe_customer_id")
-            .single();
-
-          if (insertError) throw insertError;
-          user = userFromDatabase(createdUser);
-          notify("La cuenta se ha creado con exito.");
-        }
-      } else {
-        if (!existingUser) {
-          const fallbackUser = state.users.find((entry) => entry.email === normalizedEmail);
-          if (fallbackUser?.passwordHash === passwordHash) {
-            user = fallbackUser;
-          } else {
-            notify("No existe una cuenta con ese email. Registrate primero.");
-            openAuthDialog("register");
-            document.querySelector("#emailInput").value = normalizedEmail;
-            return;
-          }
-        } else {
-          user = userFromDatabase(existingUser);
-          if (user.passwordHash && user.passwordHash !== passwordHash) {
-            notify("Contraseña incorrecta.");
-            openAuthDialog("login");
-            document.querySelector("#emailInput").value = normalizedEmail;
-            return;
-          }
-          await db
-            .from("users")
-            .update({ last_login_at: new Date().toISOString() })
-            .eq("email", normalizedEmail);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Supabase user flow failed:", error);
-    notify("No se pudo comprobar la cuenta. Intentalo de nuevo.");
-  }
-
-  if (!user) {
-    const localUser = state.users.find((entry) => entry.email === normalizedEmail);
-    if (authMode === "login" && !localUser) {
-      notify("No existe una cuenta con ese email. Registrate primero.");
-      openAuthDialog("register");
-      document.querySelector("#emailInput").value = normalizedEmail;
-      return;
-    }
-
-    user = localUser || {
-      email: normalizedEmail,
-      role: "user",
-      premium: false,
-      purchases: [],
-      name: fullName,
-      passwordHash
-    };
-  }
-
-  if (user.passwordHash && user.passwordHash !== passwordHash) {
-    notify("Contraseña incorrecta.");
-    openAuthDialog("login");
-    document.querySelector("#emailInput").value = normalizedEmail;
-    return;
-  }
-
+async function finishLogin(user) {
   user = upsertLocalUser(user);
-  state.session = { email: normalizedEmail };
+  state.session = { email: user.email };
   saveState();
   await syncCurrentUserAccess(user);
+  await syncContentFromDatabase();
   updateHeader();
   showView("dashboard");
   window.location.hash = "dashboard";
@@ -1881,6 +1836,95 @@ async function login(email, password) {
   pendingSubscriptionPlan = null;
   if (selectedPlan) {
     await startStripeCheckout("subscription", null, selectedPlan.button, selectedPlan.planId);
+  }
+}
+
+async function login(email, password) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const fullName = document.querySelector("#nameInput").value.trim();
+
+  if (!password) {
+    notify("Introduce una contraseña.");
+    openAuthDialog(authMode);
+    document.querySelector("#emailInput").value = normalizedEmail;
+    return;
+  }
+  if (authMode === "register" && !fullName) {
+    notify("Introduce tu nombre para crear la cuenta.");
+    openAuthDialog("register");
+    document.querySelector("#emailInput").value = normalizedEmail;
+    return;
+  }
+
+  try {
+    const db = await getDatabase();
+    if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+
+    const result = authMode === "register"
+      ? await db.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      })
+      : await db.auth.signInWithPassword({ email: normalizedEmail, password });
+    if (result.error) throw result.error;
+
+    if (!result.data.session) {
+      notify("Cuenta creada. Revisa tu correo y confirma el acceso antes de iniciar sesion.");
+      return;
+    }
+
+    const user = await profileForAuthUser(db, result.data.user);
+    await finishLogin(user);
+    notify(authMode === "register" ? "La cuenta se ha creado con exito." : "Sesion iniciada con exito.");
+  } catch (error) {
+    console.error("Supabase authentication failed:", error);
+    const message = String(error?.message || "").toLowerCase();
+    notify(message.includes("invalid login")
+      ? "Email o contraseña incorrectos."
+      : "No se pudo iniciar sesion. Comprueba los datos e intentalo de nuevo.");
+    openAuthDialog(authMode);
+    document.querySelector("#emailInput").value = normalizedEmail;
+  }
+}
+
+async function restoreAuthenticatedSession() {
+  try {
+    const db = await getDatabase();
+    if (!db) return;
+    if (!authListenerRegistered) {
+      db.auth.onAuthStateChange((event) => {
+        if (event === "PASSWORD_RECOVERY" && !passwordRecoveryDialog.open) {
+          passwordRecoveryDialog.showModal();
+        }
+      });
+      authListenerRegistered = true;
+    }
+    const { data, error } = await db.auth.getSession();
+    if (error) throw error;
+    if (!data?.session?.user) {
+      state.session = null;
+      saveState();
+      updateHeader();
+      return;
+    }
+
+    const user = await profileForAuthUser(db, data.session.user);
+    upsertLocalUser(user);
+    state.session = { email: user.email };
+    saveState();
+    await syncCurrentUserAccess(user);
+    updateHeader();
+    renderPublicContent();
+    if (window.location.hash === "#dashboard") renderDashboard();
+  } catch (error) {
+    console.error("Could not restore Supabase session:", error);
+    state.session = null;
+    saveState();
+    updateHeader();
   }
 }
 
@@ -2030,10 +2074,11 @@ async function openBillingPortal(button) {
   const originalText = button.textContent;
   button.textContent = "Abriendo...";
   try {
+    const headers = await authenticatedHeaders({ "Content-Type": "application/json" });
     const response = await fetch("/api/create-billing-portal-session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, email: user.email })
+      headers,
+      body: "{}"
     });
     const result = await response.json();
     if (!response.ok || !result.url) {
@@ -2372,10 +2417,11 @@ function clearMediaViewer() {
 }
 function updateHeader() {
   const user = currentUser();
-  loginButton.textContent = user ? user.role === "teacher" ? "Profesora" : user.name || user.email : "Iniciar sesion";
-  registerButton.textContent = user ? user.role === "teacher" ? "Panel" : "Mi espacio" : "Registrarse";
+  const teacher = ["teacher", "admin"].includes(user?.role);
+  loginButton.textContent = user ? teacher ? "Profesora" : user.name || user.email : "Iniciar sesion";
+  registerButton.textContent = user ? teacher ? "Panel" : "Mi espacio" : "Registrarse";
   document.querySelectorAll(".teacher-home-only").forEach((element) => {
-    element.hidden = user?.role !== "teacher";
+    element.hidden = !teacher;
   });
 }
 
@@ -2395,6 +2441,7 @@ function openAuthDialog(mode) {
   document.querySelectorAll(".register-only").forEach((element) => {
     element.hidden = !isRegister;
   });
+  forgotPasswordButton.hidden = isRegister;
   document.querySelector("#emailInput").value = "";
   document.querySelector("#passwordInput").value = "";
   document.querySelector("#passwordInput").autocomplete = isRegister ? "new-password" : "current-password";
@@ -2532,21 +2579,22 @@ document.body.addEventListener("click", async (event) => {
   const toggleUser = event.target.closest("[data-toggle-user]");
   if (toggleUser) {
     const user = state.users.find((entry) => entry.email === toggleUser.dataset.toggleUser);
-    user.premium = !user.premium;
-    saveState();
-    renderDashboard();
-    getDatabase().then((db) => {
-      if (!db) return;
-      return db
-        .from("users")
-        .update({ is_premium: user.premium })
-        .eq("email", user.email);
-    }).then((result) => {
-      if (result?.error) throw result.error;
+    const nextPremium = !user.premium;
+    authenticatedHeaders({ "Content-Type": "application/json" }).then((headers) => fetch("/api/update-user-access", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ targetUserId: user.id, premium: nextPremium })
+    })).then(async (response) => {
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "No se pudo actualizar el acceso.");
+      user.premium = nextPremium;
+      user.subscriptionStatus = nextPremium ? "active" : "inactive";
+      saveState();
+      renderDashboard();
       notify(`El acceso premium de ${user.email} se ha actualizado con exito.`);
     }).catch((error) => {
-      console.error("Could not update premium in Supabase:", error);
-      notify("No se pudo actualizar el acceso premium. Intentalo de nuevo.");
+      console.error("Could not update premium access:", error);
+      notify(error.message || "No se pudo actualizar el acceso premium.");
     });
   }
 });
@@ -2574,6 +2622,56 @@ authModeToggle.addEventListener("click", () => {
   document.querySelector("#emailInput").value = email;
   document.querySelector("#nameInput").value = name;
 });
+forgotPasswordButton.addEventListener("click", async () => {
+  const email = document.querySelector("#emailInput").value.trim().toLowerCase();
+  if (!email) {
+    notify("Introduce primero el email de la cuenta.");
+    document.querySelector("#emailInput").focus();
+    return;
+  }
+
+  try {
+    const db = await getDatabase();
+    if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+    const { error } = await db.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`
+    });
+    if (error) throw error;
+    authDialog.close();
+    notify("Te hemos enviado un enlace para crear una contraseña nueva.");
+  } catch (error) {
+    console.error("Could not request password recovery:", error);
+    notify("No se pudo enviar el correo de recuperacion. Intentalo de nuevo.");
+  }
+});
+passwordRecoveryForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const password = document.querySelector("#recoveryPassword").value;
+  const confirmation = document.querySelector("#recoveryPasswordConfirm").value;
+  const status = document.querySelector("#passwordRecoveryStatus");
+  if (password.length < 8) {
+    status.textContent = "La contraseña debe tener al menos 8 caracteres.";
+    return;
+  }
+  if (password !== confirmation) {
+    status.textContent = "Las contraseñas no coinciden.";
+    return;
+  }
+
+  try {
+    const db = await getDatabase();
+    if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+    const { error } = await db.auth.updateUser({ password });
+    if (error) throw error;
+    passwordRecoveryDialog.close();
+    passwordRecoveryForm.reset();
+    notify("La contraseña se ha actualizado con exito.");
+    await restoreAuthenticatedSession();
+  } catch (error) {
+    console.error("Could not update recovered password:", error);
+    status.textContent = "No se pudo guardar la contraseña. Solicita otro enlace.";
+  }
+});
 closeDeleteUserButton.addEventListener("click", closeDeleteUserDialog);
 cancelDeleteUserButton.addEventListener("click", closeDeleteUserDialog);
 deleteUserDialog.addEventListener("cancel", (event) => {
@@ -2589,7 +2687,7 @@ deleteUserForm.addEventListener("submit", async (event) => {
   const targetUser = state.users.find((user) => user.id === pendingDeleteUserId);
   const password = deleteUserPassword.value;
 
-  if (!teacher || teacher.role !== "teacher" || !targetUser) {
+  if (!teacher || !["teacher", "admin"].includes(teacher.role) || !targetUser) {
     deleteUserStatus.textContent = "No se pudo identificar la cuenta que quieres eliminar.";
     return;
   }
@@ -2605,12 +2703,18 @@ deleteUserForm.addEventListener("submit", async (event) => {
   deleteUserStatus.textContent = "Comprobando la cuenta...";
 
   try {
+    const db = await getDatabase();
+    if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+    const { error: reauthenticationError } = await db.auth.signInWithPassword({
+      email: teacher.email,
+      password
+    });
+    if (reauthenticationError) throw new Error("La contraseña de la profesora no es correcta.");
+    const headers = await authenticatedHeaders({ "Content-Type": "application/json" });
     const response = await fetch("/api/delete-user", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
-        actorEmail: teacher.email,
-        password,
         targetUserId: targetUser.id
       })
     });
@@ -2642,7 +2746,9 @@ registerButton.addEventListener("click", () => {
   window.location.hash = "dashboard";
 });
 
-logoutButton.addEventListener("click", () => {
+logoutButton.addEventListener("click", async () => {
+  const db = await getDatabase();
+  if (db) await db.auth.signOut();
   state.session = null;
   pendingPanel = null;
   pendingSubscriptionPlan = null;
@@ -2653,6 +2759,7 @@ logoutButton.addEventListener("click", () => {
   renderPublicContent();
   history.replaceState(null, "", "#inicio");
   showView("inicio");
+  await syncContentFromDatabase();
   notify("Sesion cerrada.");
 });
 
@@ -2892,47 +2999,37 @@ siteContentForm.addEventListener("submit", async (event) => {
   }
 });
 
-profileForm.addEventListener("submit", (event) => {
+profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const user = currentUser();
   if (!user) return;
 
-  const oldEmail = user.email;
   const newName = document.querySelector("#profileName").value.trim();
-  const newEmail = document.querySelector("#profileEmail").value.trim().toLowerCase();
 
-  if (!newName || !newEmail) {
-    notify("Completa nombre y email para guardar el perfil.");
+  if (!newName) {
+    notify("Introduce tu nombre para guardar el perfil.");
     return;
   }
 
-  const emailInUse = state.users.some((entry) => entry.email === newEmail && entry.email !== oldEmail);
-  if (emailInUse) {
-    notify("Ese email ya esta usado por otra cuenta.");
-    return;
-  }
-
-  user.name = newName;
-  user.email = newEmail;
-  state.session.email = newEmail;
-  saveState();
-  updateHeader();
-  renderDashboard();
-  renderPublicContent();
-  notify("El perfil se ha guardado con exito.");
-
-  getDatabase().then((db) => {
-    if (!db) return null;
-    return db
+  try {
+    const db = await getDatabase();
+    if (!db) throw new Error("No se pudo iniciar la conexion segura.");
+    const { error } = await db
       .from("users")
-      .update({ email: newEmail, full_name: newName })
-      .eq("email", oldEmail);
-  }).then((result) => {
-    if (result?.error) throw result.error;
-  }).catch((error) => {
+      .update({ full_name: newName })
+      .eq("auth_user_id", user.authUserId);
+    if (error) throw error;
+
+    user.name = newName;
+    saveState();
+    updateHeader();
+    renderDashboard();
+    renderPublicContent();
+    notify("El perfil se ha guardado con exito.");
+  } catch (error) {
     console.error("Could not update profile in Supabase:", error);
     notify("No se pudo sincronizar el perfil. Intentalo de nuevo.");
-  });
+  }
 });
 
 contentForm.addEventListener("submit", async (event) => {
@@ -3094,8 +3191,11 @@ renderPublicContent();
 loadSubscriptionPlans();
 updateContentTypeFields();
 routeFromHash();
-processCheckoutReturn();
-restoreStoredMedia().then(() => Promise.all([
-  syncContentFromDatabase(),
-  syncSiteContentFromDatabase()
-]));
+restoreStoredMedia().then(async () => {
+  await restoreAuthenticatedSession();
+  await processCheckoutReturn();
+  await Promise.all([
+    syncContentFromDatabase(),
+    syncSiteContentFromDatabase()
+  ]);
+});

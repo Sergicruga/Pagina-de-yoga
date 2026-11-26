@@ -1,5 +1,6 @@
 import {
   applyCheckoutSession,
+  authenticateRequest,
   getServerDatabase,
   getStripe,
   publicErrorMessage,
@@ -20,9 +21,14 @@ export default {
 
       const stripe = getStripe();
       const database = getServerDatabase();
+      const user = await authenticateRequest(request, database);
+      if (!user) return responseJson({ message: "Inicia sesion de nuevo para confirmar el pago." }, 401);
       const session = await stripe.checkout.sessions.retrieve(sessionId, {
         expand: ["subscription"]
       });
+      if (session.metadata?.userId !== user.id) {
+        return responseJson({ message: "La sesion de pago no pertenece a esta cuenta." }, 403);
+      }
       const result = await applyCheckoutSession(database, stripe, session);
 
       return responseJson({

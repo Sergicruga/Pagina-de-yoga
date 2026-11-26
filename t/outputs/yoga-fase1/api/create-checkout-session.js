@@ -1,6 +1,6 @@
 import {
+  authenticateRequest,
   checkoutSiteUrl,
-  findUser,
   getServerDatabase,
   getStripe,
   publicErrorMessage,
@@ -28,17 +28,14 @@ export default {
       const body = await request.json();
       const purchaseType = body.purchaseType;
       const subscriptionPlanId = String(body.subscriptionPlanId || "");
-      const email = String(body.email || "").trim().toLowerCase();
-      if (!email || !["lesson", "subscription"].includes(purchaseType)) {
+      if (!["lesson", "subscription"].includes(purchaseType)) {
         return responseJson({ message: "La solicitud de pago no es valida." }, 400);
       }
 
       const database = getServerDatabase();
       const stripe = getStripe();
-      const user = await findUser(database, { userId: body.userId, email });
-      if (!user || user.email !== email) {
-        return responseJson({ message: "No se encontro tu cuenta en la base de datos." }, 404);
-      }
+      const user = await authenticateRequest(request, database);
+      if (!user) return responseJson({ message: "Inicia sesion de nuevo para continuar." }, 401);
       if (user.role === "teacher" || user.role === "admin") {
         return responseJson({ message: "La cuenta de profesora ya tiene acceso al contenido." }, 409);
       }

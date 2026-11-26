@@ -1,6 +1,6 @@
 import {
+  authenticateRequest,
   checkoutSiteUrl,
-  findUser,
   getServerDatabase,
   getStripe,
   publicErrorMessage,
@@ -14,15 +14,9 @@ export default {
     }
 
     try {
-      const body = await request.json();
-      const email = String(body.email || "").trim().toLowerCase();
-      if (!email) return responseJson({ message: "La cuenta no es valida." }, 400);
-
       const database = getServerDatabase();
-      const user = await findUser(database, { userId: body.userId, email });
-      if (!user || user.email !== email) {
-        return responseJson({ message: "No se encontro tu cuenta." }, 404);
-      }
+      const user = await authenticateRequest(request, database);
+      if (!user) return responseJson({ message: "Inicia sesion de nuevo para continuar." }, 401);
       if (!user.stripe_customer_id) {
         return responseJson({ message: "No hay una suscripcion de Stripe para esta cuenta." }, 409);
       }

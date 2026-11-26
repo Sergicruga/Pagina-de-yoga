@@ -1,10 +1,21 @@
-# Configurar Stripe en modo de prueba
+# Configurar Stripe
 
-La web ya contiene el flujo de compra individual y suscripcion. Para activarlo hay que configurar Stripe y Vercel; ninguna clave secreta debe copiarse en `index.html` ni en `app.js`.
+La web ya contiene el flujo de compra individual y suscripcion. Para activarlo hay que configurar Supabase Auth, Stripe y Vercel; ninguna clave secreta debe copiarse en `index.html` ni en `app.js`.
+
+## 0. Seguridad obligatoria antes de pagos reales
+
+1. Ejecuta `supabase/01_preparar_supabase_auth.sql`.
+2. En `Supabase > Authentication > URL Configuration`, configura `https://resetdeconciencia.com` como Site URL y anade `https://resetdeconciencia.com/**` a Redirect URLs.
+3. Despliega la version que inicia sesion con Supabase Auth.
+4. Crea o confirma la cuenta de la profesora con el mismo email de su perfil existente y una contraseña nueva.
+5. Comprueba que puede entrar, subir contenido y ver usuarios.
+6. Ejecuta `supabase/02_cerrar_politicas_produccion.sql`.
+
+El segundo script elimina las politicas de demostracion y las claves antiguas, protege los enlaces y textos premium con URLs y tablas privadas, y deja las operaciones administrativas solo para la profesora.
 
 ## 1. Crear los planes de suscripcion en Stripe
 
-1. Entra en Stripe con el modo de prueba activado.
+1. Empieza en modo de prueba. Pasa a modo real solo despues de completar el apartado de seguridad.
 2. Crea un producto llamado, por ejemplo, `Reset Premium`.
 3. Anade tres precios recurrentes en EUR al mismo producto:
    - 31,50 EUR: intervalo `month`, cada 1 mes.
@@ -61,4 +72,4 @@ Publica de nuevo despues de configurar los tres precios. Abre `Suscripcion`, sel
 
 En Stripe Checkout puede usarse la tarjeta de prueba `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC.
 
-Antes de cambiar de claves `sk_test_...` a claves reales hay que migrar el acceso actual a Supabase Auth. El inicio de sesion provisional de esta fase no ofrece seguridad suficiente para cobrar dinero real.
+En modo real utiliza exclusivamente claves `sk_live_...` de la cuenta de la clienta y rota cualquier clave que se haya compartido fuera de Vercel.

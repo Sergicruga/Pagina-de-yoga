@@ -329,8 +329,9 @@
               <form class="profile-form" id="profileForm">
                 <div class="form-grid">
                   <label>Nombre<input id="profileName" type="text" placeholder="Tu nombre"></label>
-                  <label>Email<input id="profileEmail" type="email" placeholder="tu@email.com"></label>
+                  <label>Email<input id="profileEmail" type="email" placeholder="tu@email.com" readonly></label>
                 </div>
+                <p class="field-helper">El email identifica tu acceso y se cambia mediante confirmacion de seguridad.</p>
                 <p id="profileText"></p>
                 <div class="profile-actions">
                   <button class="primary-button" type="submit">Guardar perfil</button>
@@ -588,10 +589,23 @@
         <p class="auth-helper" id="authHelper">Entra con tu email para acceder a tu espacio privado.</p>
         <label class="register-only">Nombre<input id="nameInput" type="text" placeholder="Tu nombre"></label>
         <label>Email<input id="emailInput" type="email" autocomplete="email" placeholder="tu@email.com" required></label>
-        <label>Contraseña<input id="passwordInput" type="password" autocomplete="current-password" placeholder="Tu contraseña" required></label>
+        <label>Contraseña<input id="passwordInput" type="password" autocomplete="current-password" minlength="8" placeholder="Minimo 8 caracteres" required></label>
         <p class="auth-note" id="authNote">Introduce los datos de tu cuenta para continuar.</p>
         <button class="primary-button" id="authSubmitButton" type="submit">Entrar</button>
+        <button class="auth-mode-toggle" id="forgotPasswordButton" type="button">He olvidado mi contraseña</button>
         <button class="auth-mode-toggle" id="authModeToggle" type="button">Crear una cuenta nueva</button>
+      </form>
+    </dialog>
+
+    <dialog class="auth-dialog" id="passwordRecoveryDialog">
+      <form class="auth-card" id="passwordRecoveryForm">
+        <p class="eyebrow">Acceso seguro</p>
+        <h2>Crear nueva contraseña</h2>
+        <p class="auth-helper">Introduce una contraseña nueva para recuperar tu cuenta.</p>
+        <label>Nueva contraseña<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Repite la contraseña<input id="recoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="primary-button" type="submit">Guardar contraseña</button>
+        <p class="dialog-status" id="passwordRecoveryStatus" aria-live="polite"></p>
       </form>
     </dialog>
 

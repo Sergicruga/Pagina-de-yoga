@@ -48,6 +48,28 @@ export function responseJson(payload, status = 200) {
   });
 }
 
+function bearerToken(request) {
+  const authorization = String(request.headers.get("authorization") || "");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || "";
+}
+
+export async function authenticateRequest(request, database = getServerDatabase()) {
+  const token = bearerToken(request);
+  if (!token) return null;
+
+  const { data: authData, error: authError } = await database.auth.getUser(token);
+  if (authError || !authData?.user?.id) return null;
+
+  const { data: profile, error: profileError } = await database
+    .from("users")
+    .select("id,auth_user_id,email,full_name,role,is_premium,stripe_customer_id,stripe_subscription_id,subscription_status,premium_until")
+    .eq("auth_user_id", authData.user.id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  return profile || null;
+}
+
 export function checkoutSiteUrl(request) {
   const configuredUrl = process.env.SITE_URL?.trim().replace(/\/$/, "");
   return configuredUrl || new URL(request.url).origin;

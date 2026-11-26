@@ -1,4 +1,4 @@
-import { getServerDatabase, responseJson } from "../lib/payments.js";
+import { authenticateRequest, getServerDatabase, responseJson } from "../lib/payments.js";
 
 function environmentValue(name) {
   return String(process.env[name] || "").trim();
@@ -18,18 +18,6 @@ function validUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function secureEqual(left, right) {
-  const leftBytes = new TextEncoder().encode(String(left));
-  const rightBytes = new TextEncoder().encode(String(right));
-  if (leftBytes.length !== rightBytes.length) return false;
-
-  let difference = 0;
-  for (let index = 0; index < leftBytes.length; index += 1) {
-    difference |= leftBytes[index] ^ rightBytes[index];
-  }
-  return difference === 0;
-}
-
 export default {
   async fetch(request) {
     if (request.method !== "POST") {
@@ -42,32 +30,22 @@ export default {
 
     try {
       const body = await request.json();
-      const actorEmail = String(body.actorEmail || "").trim().toLowerCase().slice(0, 254);
-      const password = String(body.password || "").slice(0, 200);
       const targetUserId = String(body.targetUserId || "").trim();
 
-      if (!actorEmail || !password || !validUuid(targetUserId)) {
+      if (!validUuid(targetUserId)) {
         return responseJson({ message: "Faltan datos para confirmar la eliminacion." }, 400);
       }
 
       const database = getServerDatabase();
-      const { data: actor, error: actorError } = await database
-        .from("users")
-        .select("id,email,password_hash,role")
-        .eq("email", actorEmail)
-        .maybeSingle();
-
-      if (actorError) throw actorError;
-      const storedPassword = String(actor?.password_hash || "");
-      const passwordIsValid = secureEqual(storedPassword, `demo:${password}`)
-        || secureEqual(storedPassword, password);
-      if (!actor || !["teacher", "admin"].includes(actor.role) || !passwordIsValid) {
-        return responseJson({ message: "La contraseña de la profesora no es correcta." }, 403);
+      const actor = await authenticateRequest(request, database);
+      if (!actor) return responseJson({ message: "Inicia sesion de nuevo para continuar." }, 401);
+      if (!["teacher", "admin"].includes(actor.role)) {
+        return responseJson({ message: "No tienes permiso para eliminar usuarios." }, 403);
       }
 
       const { data: target, error: targetError } = await database
         .from("users")
-        .select("id,email,role,stripe_subscription_id,subscription_status")
+        .select("id,auth_user_id,email,role,stripe_subscription_id,subscription_status")
         .eq("id", targetUserId)
         .maybeSingle();
 
@@ -83,6 +61,11 @@ export default {
         return responseJson({
           message: "Cancela primero la suscripcion activa de esta cuenta antes de eliminarla."
         }, 409);
+      }
+
+      if (target.auth_user_id) {
+        const { error: authDeleteError } = await database.auth.admin.deleteUser(target.auth_user_id);
+        if (authDeleteError) throw authDeleteError;
       }
 
       const { error: deleteError } = await database

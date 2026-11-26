@@ -808,6 +808,20 @@ label {
   line-height: 1.55;
 }
 
+.field-helper {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+input[readonly] {
+  background: var(--surface-tint);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 .content-card {
   display: grid;
   gap: 12px;

@@ -1,4 +1,4 @@
-import { getServerDatabase, responseJson } from "../lib/payments.js";
+import { authenticateRequest, getServerDatabase, responseJson } from "../lib/payments.js";
 
 function requestOriginIsAllowed(request) {
   const origin = request.headers.get("origin");
@@ -8,18 +8,6 @@ function requestOriginIsAllowed(request) {
   const siteUrl = String(process.env.SITE_URL || "").trim().replace(/\/$/, "");
   if (siteUrl) allowedOrigins.add(siteUrl);
   return allowedOrigins.has(origin);
-}
-
-function secureEqual(left, right) {
-  const leftBytes = new TextEncoder().encode(String(left));
-  const rightBytes = new TextEncoder().encode(String(right));
-  if (leftBytes.length !== rightBytes.length) return false;
-
-  let difference = 0;
-  for (let index = 0; index < leftBytes.length; index += 1) {
-    difference |= leftBytes[index] ^ rightBytes[index];
-  }
-  return difference === 0;
 }
 
 export default {
@@ -32,23 +20,9 @@ export default {
     }
 
     try {
-      const body = await request.json();
-      const email = String(body.email || "").trim().toLowerCase().slice(0, 254);
-      const passwordHash = String(body.passwordHash || "").slice(0, 250);
-      if (!email || !passwordHash) {
-        return responseJson({ message: "No se pudo comprobar el acceso de la cuenta." }, 400);
-      }
-
       const database = getServerDatabase();
-      const { data: user, error: userError } = await database
-        .from("users")
-        .select("id,email,password_hash,is_premium,subscription_status,premium_until,stripe_customer_id")
-        .eq("email", email)
-        .maybeSingle();
-      if (userError) throw userError;
-      if (!user || !secureEqual(user.password_hash || "", passwordHash)) {
-        return responseJson({ message: "No se pudo validar la cuenta." }, 403);
-      }
+      const user = await authenticateRequest(request, database);
+      if (!user) return responseJson({ message: "Inicia sesion de nuevo para continuar." }, 401);
 
       const { data: purchases, error: purchaseError } = await database
         .from("lesson_purchases")
