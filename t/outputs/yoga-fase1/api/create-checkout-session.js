@@ -63,7 +63,7 @@ export default {
         const lessonId = String(body.lessonId || "");
         const { data: lesson, error } = await database
           .from("lessons")
-          .select("id,title,description,is_premium,is_published,price_individual")
+          .select("id,title,description,is_premium,is_published,price_individual,access_duration_days")
           .eq("id", lessonId)
           .eq("is_published", true)
           .maybeSingle();
@@ -76,17 +76,20 @@ export default {
 
         const { data: previousPurchase, error: purchaseError } = await database
           .from("lesson_purchases")
-          .select("id")
+          .select("id,expires_at")
           .eq("user_id", user.id)
           .eq("lesson_id", lesson.id)
           .eq("status", "paid")
           .maybeSingle();
         if (purchaseError) throw purchaseError;
-        if (previousPurchase) {
+        const previousPurchaseActive = previousPurchase
+          && (!previousPurchase.expires_at || Date.parse(previousPurchase.expires_at) > Date.now());
+        if (previousPurchaseActive) {
           return responseJson({ message: "Este contenido ya esta comprado en tu cuenta." }, 409);
         }
 
         metadata.lessonId = lesson.id;
+        metadata.accessDurationDays = String(Math.max(0, Math.floor(Number(lesson.access_duration_days || 0))));
         sessionOptions.line_items = [{
           quantity: 1,
           price_data: {

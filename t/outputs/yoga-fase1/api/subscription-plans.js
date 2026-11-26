@@ -24,6 +24,8 @@ export default {
             id: plan.id,
             label: plan.label,
             months: plan.months,
+            amount: plan.amount,
+            currency: "eur",
             available: false
           };
         }
@@ -37,7 +39,7 @@ export default {
           id: plan.id,
           label: plan.label,
           months: plan.months,
-          amount: price.unit_amount,
+          amount: plan.amount,
           currency: price.currency,
           available: true
         };

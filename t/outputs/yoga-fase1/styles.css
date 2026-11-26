@@ -456,6 +456,55 @@ h3 {
   margin-top: 22px;
 }
 
+.offer-heading {
+  margin: 64px 0 22px;
+}
+
+.offer-heading.compact {
+  margin-top: 42px;
+}
+
+.offer-heading .eyebrow,
+.offer-heading h2,
+.offer-heading h3,
+.offer-heading p {
+  margin-top: 0;
+}
+
+.offer-heading > p:last-child {
+  color: var(--muted);
+}
+
+.offer-card {
+  min-height: 320px;
+}
+
+.offer-card h3 {
+  font-size: 1.25rem;
+}
+
+.offer-price-row {
+  display: grid;
+  gap: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.offer-price-row strong {
+  font-size: 1.35rem;
+}
+
+.offer-price-row span,
+.offer-benefit,
+.access-expiry {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.offer-benefit {
+  font-weight: 800;
+}
+
 .auth-mode-toggle {
   border: 0;
   background: transparent;

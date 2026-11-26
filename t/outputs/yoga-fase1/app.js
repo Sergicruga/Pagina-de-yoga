@@ -7,6 +7,59 @@ const legacySampleItemIds = new Set(["item-1", "item-2", "item-3", "item-4"]);
 const seedUsers = [];
 const legacySampleUserEmails = new Set(["alumna@demo.com", "premium@demo.com", "profesora@demo.com"]);
 
+const commercialOffers = [
+  {
+    code: "challenge-21",
+    title: "Reto 21 dias: Compromiso contigo",
+    description: "Un recorrido guiado de 21 dias para sostener tu practica y tu compromiso personal.",
+    price: 60,
+    accessDays: 30,
+    type: "pack",
+    category: "Retos",
+    includedInSubscription: false
+  },
+  {
+    code: "meditation-7",
+    title: "Pack 7 dias de meditacion",
+    description: "Siete meditaciones para crear una semana de practica a tu ritmo.",
+    price: 25,
+    accessDays: 21,
+    type: "pack",
+    category: "Meditacion",
+    includedInSubscription: false
+  },
+  {
+    code: "meditation-14",
+    title: "Pack 14 dias de meditacion",
+    description: "Catorce meditaciones para profundizar en una rutina de calma y presencia.",
+    price: 39,
+    accessDays: 30,
+    type: "pack",
+    category: "Meditacion",
+    includedInSubscription: false
+  },
+  {
+    code: "conscious-breathing",
+    title: "Pack respiraciones conscientes",
+    description: "Practicas de respiracion para regular la energia, volver al cuerpo y recuperar el foco.",
+    price: 20,
+    accessDays: 30,
+    type: "pack",
+    category: "Respiracion",
+    includedInSubscription: false
+  },
+  {
+    code: "live-class",
+    title: "Clase en directo",
+    description: "Una practica en directo con Miriam. Gratuita para personas con una suscripcion activa.",
+    price: 10,
+    accessDays: 0,
+    type: "live",
+    category: "Directos",
+    includedInSubscription: true
+  }
+];
+
 const serviceDetails = {
   yoga: {
     eyebrow: "Clases online",
@@ -39,14 +92,14 @@ const serviceDetails = {
   premium: {
     eyebrow: "Contenido exclusivo",
     title: "Premium con libertad para elegir",
-    intro: "Accede a toda la biblioteca mediante suscripcion o compra solamente la clase que te interesa, sin asumir ningun compromiso.",
+    intro: "Accede sin limites a meditaciones y clases mediante suscripcion, o elige un reto, pack o clase concreta con una compra unica.",
     image: "assets/profesora-provisional.png",
     imageAlt: "Profesora de yoga en un estudio luminoso",
     libraryTitle: "Contenido premium destacado",
     premiumOnly: true,
     facts: [
-      ["Suscripcion", "Acceso completo a todos los videos y audios premium mientras el plan este activo."],
-      ["Compra individual", "Desbloquea una sola clase y mantenla disponible en tu cuenta sin suscribirte."],
+      ["Suscripcion", "Acceso ilimitado a meditaciones y clases mientras el plan este activo."],
+      ["Compra individual", "Elige una clase, reto o pack y consulta claramente su periodo de acceso."],
       ["Vista previa", "Reproduce el trailer antes de decidir que contenido encaja mejor contigo."]
     ]
   }
@@ -195,6 +248,10 @@ const subscriptionPlanMessages = [
   document.querySelector("#publicSubscriptionMessage"),
   document.querySelector("#dashboardSubscriptionMessage")
 ];
+const offerCatalogContainers = [
+  document.querySelector("#publicOfferCatalog"),
+  document.querySelector("#dashboardOfferCatalog")
+];
 const manageSubscriptionButton = document.querySelector("#manageSubscriptionButton");
 let authMode = "login";
 const mediaUrls = new Map();
@@ -210,7 +267,12 @@ let editingItemId = null;
 let currentTeacherSlide = 0;
 let pendingSitePhotoPreviewUrl = null;
 let pendingSubscriptionPlan = null;
-let loadedSubscriptionPlans = [];
+const fallbackSubscriptionPlans = [
+  { id: "1-month", label: "1 mes", months: 1, amount: 3150, currency: "eur", available: false },
+  { id: "3-months", label: "3 meses", months: 3, amount: 8150, currency: "eur", available: false },
+  { id: "6-months", label: "6 meses", months: 6, amount: 14050, currency: "eur", available: false }
+];
+let loadedSubscriptionPlans = fallbackSubscriptionPlans.map((plan) => ({ ...plan }));
 let subscriptionPlansError = "";
 let pendingDeleteUserId = null;
 
@@ -294,6 +356,10 @@ function normalizeState(savedState) {
       body: item.body || "",
       assets: normalizeItemAssets(item),
       price: item.price ?? (item.premium ? 6 : 0),
+      offerCode: item.offerCode || "",
+      accessDays: normalizeAccessDays(item.accessDays),
+      includedInSubscription: item.includedInSubscription ?? (item.premium && item.type !== "pack"),
+      liveUrl: item.liveUrl || "",
       previewEnabled: item.previewEnabled ?? (item.premium && ["item-3", "item-4"].includes(item.id)),
       previewDuration: item.previewDuration ?? (item.id === "item-4" ? "4 min" : "2 min")
     })),
@@ -304,7 +370,8 @@ function normalizeState(savedState) {
         ...user,
         name: user.name || user.full_name || seedUser?.name || "",
         passwordHash: user.passwordHash || user.password_hash || seedUser?.passwordHash || "",
-        purchases: user.purchases || []
+        purchases: user.purchases || [],
+        purchaseExpirations: user.purchaseExpirations || {}
       };
     })
   };
@@ -451,12 +518,14 @@ async function processCheckoutReturn() {
       if (result.purchaseType === "subscription") {
         user.premium = true;
         user.subscriptionStatus = result.subscriptionStatus || "active";
-      user.premiumUntil = result.premiumUntil || null;
-      user.stripeCustomerId = result.stripeCustomerId || user.stripeCustomerId || null;
-    } else if (result.purchaseType === "lesson" && result.lessonId) {
+        user.premiumUntil = result.premiumUntil || null;
+        user.stripeCustomerId = result.stripeCustomerId || user.stripeCustomerId || null;
+      } else if (result.purchaseType === "lesson" && result.lessonId) {
         user.purchases = user.purchases || [];
+        user.purchaseExpirations = user.purchaseExpirations || {};
         const itemId = databaseItemId(result.lessonId);
         if (!user.purchases.includes(itemId)) user.purchases.push(itemId);
+        user.purchaseExpirations[itemId] = result.expiresAt || null;
       }
     }
 
@@ -483,6 +552,10 @@ async function getDatabase() {
 
 function databaseItemId(databaseId) {
   return `db-${databaseId}`;
+}
+
+function normalizeAccessDays(value) {
+  return Math.max(0, Math.floor(Number(value) || 0));
 }
 
 function slugify(value) {
@@ -624,7 +697,8 @@ const contentTypeLabels = {
   audio: "Audio",
   book: "Libro",
   thought: "Pensamiento",
-  pack: "Pack"
+  pack: "Pack",
+  live: "Clase en directo"
 };
 
 function contentTypeLabel(type) {
@@ -696,6 +770,7 @@ function assetFromDatabase(entry) {
 }
 
 function inferContentType(row, assets) {
+  if (row.content_type) return row.content_type;
   if (assets.length > 1) return "pack";
   if (assets[0]?.type === "document") return "book";
   if (assets[0]?.type === "audio") return "audio";
@@ -710,6 +785,11 @@ const lessonSelect = `
   body,
   is_premium,
   price_individual,
+  content_type,
+  commercial_offer_code,
+  access_duration_days,
+  included_in_subscription,
+  live_url,
   preview_enabled,
   preview_duration_seconds,
   level,
@@ -754,6 +834,10 @@ function itemFromDatabase(row) {
     duration: row.duration || formatDuration(Number(row.duration_seconds || primaryAsset?.durationSeconds || 0)) || "Lectura libre",
     durationSeconds: Number(row.duration_seconds || primaryAsset?.durationSeconds || 0),
     price: Number(row.price_individual || 0),
+    offerCode: row.commercial_offer_code || "",
+    accessDays: normalizeAccessDays(row.access_duration_days),
+    includedInSubscription: Boolean(row.included_in_subscription),
+    liveUrl: row.live_url || "",
     premium: Boolean(row.is_premium),
     previewEnabled: Boolean(row.preview_enabled),
     previewDuration: formatDuration(Number(row.preview_duration_seconds || 0)),
@@ -800,6 +884,11 @@ async function saveContentToDatabase(item, inputs = {}) {
     body: item.body || null,
     is_premium: Boolean(item.premium),
     price_individual: Number(item.price || 0),
+    content_type: item.type,
+    commercial_offer_code: item.offerCode || null,
+    access_duration_days: normalizeAccessDays(item.accessDays),
+    included_in_subscription: Boolean(item.includedInSubscription),
+    live_url: item.liveUrl || null,
     preview_enabled: Boolean(item.previewEnabled),
     preview_duration_seconds: previewLimitInSeconds(item.previewDuration),
     level: item.level || null,
@@ -848,7 +937,8 @@ async function saveContentToDatabase(item, inputs = {}) {
     audio: ["audio"],
     book: ["document"],
     thought: [],
-    pack: ["video", "audio", "document"]
+    pack: ["video", "audio", "document"],
+    live: []
   }[item.type] || [];
   const retainedAssets = [];
   const newAssets = [];
@@ -879,45 +969,47 @@ async function saveContentToDatabase(item, inputs = {}) {
     }
   }
 
-  async function prepareUploadedAsset(type, file, position) {
-    const existing = existingAssets.find((asset) => asset.type === type);
+  async function prepareUploadedAssets(type, files, startPosition) {
+    const existing = existingAssets.filter((asset) => asset.type === type);
     if (!allowedTypes.includes(type)) return;
-    if (!file) {
-      if (existing) retainedAssets.push(existing);
+    if (!files.length) {
+      retainedAssets.push(...existing);
       return;
     }
 
-    const storagePath = `${lesson.id}/${Date.now()}-${type}-${safeStorageFileName(file.name)}`;
-    const { error: uploadError } = await db.storage
-      .from(supabaseMediaBucket)
-      .upload(storagePath, file, {
-        cacheControl: "3600",
-        contentType: file.type || undefined,
-        upsert: false
+    for (const [index, file] of files.entries()) {
+      const storagePath = `${lesson.id}/${Date.now()}-${type}-${index}-${safeStorageFileName(file.name)}`;
+      const { error: uploadError } = await db.storage
+        .from(supabaseMediaBucket)
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: file.type || undefined,
+          upsert: false
+        });
+      if (uploadError) throw uploadError;
+      uploadedPaths.push(storagePath);
+
+      const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(storagePath);
+      if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
+
+      newAssets.push({
+        type,
+        url: publicUrlData.publicUrl,
+        storageBucket: supabaseMediaBucket,
+        storagePath,
+        fileName: file.name,
+        mimeType: file.type || null,
+        fileSize: file.size,
+        durationSeconds: type === "audio" ? previewLimitInSeconds(item.duration) || null : null,
+        position: startPosition + index,
+        metadata: { category: item.category, level: item.level, premium: Boolean(item.premium) }
       });
-    if (uploadError) throw uploadError;
-    uploadedPaths.push(storagePath);
-
-    const { data: publicUrlData } = db.storage.from(supabaseMediaBucket).getPublicUrl(storagePath);
-    if (!publicUrlData?.publicUrl) throw new Error("Supabase no devolvio la URL publica del archivo");
-
-    newAssets.push({
-      type,
-      url: publicUrlData.publicUrl,
-      storageBucket: supabaseMediaBucket,
-      storagePath,
-      fileName: file.name,
-      mimeType: file.type || null,
-      fileSize: file.size,
-      durationSeconds: type === "audio" ? previewLimitInSeconds(item.duration) || null : null,
-      position,
-      metadata: { category: item.category, level: item.level, premium: Boolean(item.premium) }
-    });
+    }
   }
 
   try {
-    await prepareUploadedAsset("audio", inputs.audioFile, 1);
-    await prepareUploadedAsset("document", inputs.bookFile, 2);
+    await prepareUploadedAssets("audio", inputs.audioFiles || [], 1);
+    await prepareUploadedAssets("document", inputs.bookFile ? [inputs.bookFile] : [], 100);
 
     for (const asset of newAssets) {
       const { data, error } = await db
@@ -1003,7 +1095,8 @@ function userFromDatabase(row) {
     subscriptionStatus: row.subscription_status || "inactive",
     premiumUntil: row.premium_until || null,
     stripeCustomerId: row.stripe_customer_id || null,
-    purchases: []
+    purchases: [],
+    purchaseExpirations: {}
   };
 }
 
@@ -1013,7 +1106,8 @@ function upsertLocalUser(user) {
     state.users[index] = {
       ...state.users[index],
       ...user,
-      purchases: state.users[index].purchases || user.purchases || []
+      purchases: state.users[index].purchases || user.purchases || [],
+      purchaseExpirations: state.users[index].purchaseExpirations || user.purchaseExpirations || {}
     };
     return state.users[index];
   }
@@ -1039,7 +1133,8 @@ async function syncUsersFromDatabase() {
       const databaseUser = userFromDatabase(row);
       return {
         ...databaseUser,
-        purchases: existingUsers.get(databaseUser.email)?.purchases || []
+        purchases: existingUsers.get(databaseUser.email)?.purchases || [],
+        purchaseExpirations: existingUsers.get(databaseUser.email)?.purchaseExpirations || {}
       };
     });
     const databaseEmails = new Set(databaseUsers.map((user) => user.email));
@@ -1053,13 +1148,51 @@ async function syncUsersFromDatabase() {
   }
 }
 
+async function syncCurrentUserAccess(user = currentUser()) {
+  if (!user?.id || !user.passwordHash || window.location.protocol === "file:") return;
+
+  try {
+    const response = await fetch("/api/user-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: user.email, passwordHash: user.passwordHash })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || "No se pudo actualizar el acceso.");
+
+    user.premium = Boolean(result.premium);
+    user.subscriptionStatus = result.subscriptionStatus || "inactive";
+    user.premiumUntil = result.premiumUntil || null;
+    user.stripeCustomerId = result.stripeCustomerId || null;
+    user.purchases = [];
+    user.purchaseExpirations = {};
+    (result.purchases || []).forEach((purchase) => {
+      const itemId = databaseItemId(purchase.lessonId);
+      user.purchases.push(itemId);
+      user.purchaseExpirations[itemId] = purchase.expiresAt || null;
+    });
+    saveState();
+  } catch (error) {
+    console.error("Could not sync current user access:", error);
+  }
+}
+
 function isTeacher() {
   return currentUser()?.role === "teacher";
 }
 
+function hasActivePurchase(user, item) {
+  if (!user?.purchases?.includes(item.id)) return false;
+  const expiresAt = user.purchaseExpirations?.[item.id];
+  return !expiresAt || Date.parse(expiresAt) > Date.now();
+}
+
 function canOpen(item) {
   const user = currentUser();
-  return !item.premium || user?.premium || user?.role === "teacher" || user?.purchases?.includes(item.id);
+  return !item.premium
+    || user?.role === "teacher"
+    || hasActivePurchase(user, item)
+    || Boolean(user?.premium && item.includedInSubscription);
 }
 
 function showView(route) {
@@ -1121,6 +1254,7 @@ function renderPublicContent() {
     ? items.map(contentCard).join("")
     : '<p class="empty-service-content">Todavia no hay contenido publicado con estos filtros.</p>';
   renderAboutContent();
+  renderCommercialOffers();
 }
 
 function renderAboutContent() {
@@ -1311,10 +1445,15 @@ function contentCard(item) {
     audio: "audio",
     book: "libro",
     thought: "texto",
-    pack: "pack"
+    pack: "pack",
+    live: "directo"
   };
-  const boughtSingle = Boolean(user?.purchases?.includes(item.id));
-  const accessText = locked ? "Premium" : item.premium ? boughtSingle ? "Comprado" : "Premium incluido" : "Gratis";
+  const boughtSingle = hasActivePurchase(user, item);
+  const subscriptionAccess = Boolean(user?.premium && item.includedInSubscription);
+  const accessText = locked
+    ? item.includedInSubscription ? "Suscripcion o compra" : "Compra individual"
+    : item.premium ? boughtSingle ? "Comprado" : subscriptionAccess ? "Incluido en suscripcion" : "Acceso activo" : "Gratis";
+  const purchaseExpiry = boughtSingle ? user.purchaseExpirations?.[item.id] : null;
   const assets = normalizeItemAssets(item);
   const videoAsset = assets.find((asset) => asset.type === "video");
   const audioAsset = assets.find((asset) => asset.type === "audio");
@@ -1332,6 +1471,8 @@ function contentCard(item) {
 
   const resourceLabel = item.type === "pack"
     ? `${assets.length} recursos`
+    : item.type === "live"
+      ? "Acceso online"
     : item.type === "thought"
       ? "Lectura"
       : item.fileName || "Contenido";
@@ -1346,21 +1487,25 @@ function contentCard(item) {
         <span class="chip ${item.premium ? "premium" : ""}">${escapeHtml(accessText)}</span>
         ${item.previewEnabled ? `<span class="chip preview">Trailer ${escapeHtml(item.previewDuration || "2 min")}</span>` : ""}
         ${item.premium && item.price > 0 ? `<span class="chip price">${escapeHtml(formatPrice(item.price))}</span>` : ""}
+        ${item.accessDays > 0 ? `<span class="chip">Acceso ${escapeHtml(String(item.accessDays))} dias</span>` : ""}
       </div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml(item.description || (item.type === "thought" ? item.body.slice(0, 180) : ""))}</p>
       ${locked ? `<p class="preview-note">${!item.databaseId
         ? "La compra individual se activara cuando termine la publicacion de este contenido."
         : hasIndividualPrice
-          ? "Puedes comprar este contenido suelto o activar la suscripcion completa."
+          ? item.includedInSubscription
+            ? "Puedes comprar este contenido suelto o acceder con una suscripcion activa."
+            : `Compra este contenido y disfrutalo durante ${item.accessDays || "todos los"} dias.`
           : "La compra individual estara disponible cuando la profesora asigne un precio."}</p>` : ""}
+      ${purchaseExpiry ? `<p class="access-expiry">Disponible hasta ${escapeHtml(formatAccessDate(purchaseExpiry))}.</p>` : ""}
       <p><strong>${escapeHtml(item.duration)}</strong> - ${escapeHtml(resourceLabel)}</p>
       <div class="card-actions">
         ${!locked ? `<button class="primary-button" type="button" data-open-item="${item.id}">Abrir contenido</button>` : ""}
         ${hasPreview ? `<button class="secondary-button" type="button" data-preview-item="${item.id}">Ver trailer ${escapeHtml(item.previewDuration || "")}</button>` : ""}
         ${canBuySingle ? `<button class="primary-button" type="button" data-buy-item="${item.id}">Comprar ${escapeHtml(formatPrice(item.price))}</button>` : ""}
         ${locked && item.premium && !hasIndividualPrice ? `<button class="secondary-button" type="button" data-price-pending>Compra individual: precio pendiente</button>` : ""}
-        ${locked ? `<button class="secondary-button" type="button" data-route="suscripcion">Ver planes</button>` : ""}
+        ${locked && item.includedInSubscription ? `<button class="secondary-button" type="button" data-route="suscripcion">Ver planes</button>` : ""}
       </div>
     </article>
   `;
@@ -1375,7 +1520,7 @@ function renderDashboard() {
   document.querySelector("#premiumStatus").hidden = teacher;
   document.querySelector("#premiumStatus").textContent = user.premium ? "Premium activo" : "Plan gratis";
   document.querySelector("#premiumStatus").classList.toggle("premium", user.premium);
-  const purchasedCount = user.purchases?.length || 0;
+  const purchasedCount = state.items.filter((item) => hasActivePurchase(user, item)).length;
   document.querySelector("#profileName").value = user.name || "";
   document.querySelector("#profileEmail").value = user.email || "";
   document.querySelector("#profileText").textContent = `Nombre: ${displayName}. Email: ${user.email}. Acceso: ${user.premium ? "suscripcion premium" : "plan gratis"}. Compras individuales: ${purchasedCount}.`;
@@ -1402,8 +1547,9 @@ function renderAdminRows() {
     <tr>
       <td>${escapeHtml(item.title)}</td>
       <td>${escapeHtml(contentTypeLabel(item.type))}</td>
-      <td>${item.premium ? "Premium" : "Gratis"}</td>
+      <td>${item.premium ? item.includedInSubscription ? "Suscripcion y compra" : "Compra individual" : "Gratis"}</td>
       <td>${item.premium ? item.price > 0 ? escapeHtml(formatPrice(item.price)) : "Falta precio" : "-"}</td>
+      <td>${item.accessDays > 0 ? `${escapeHtml(String(item.accessDays))} dias` : "Sin caducidad"}</td>
       <td>${item.previewEnabled ? escapeHtml(item.previewDuration || "Si") : "No"}</td>
       <td>
         <div class="table-actions">
@@ -1420,6 +1566,7 @@ function updateContentTypeFields(syncCategory = false) {
   const youtubeField = document.querySelector("#itemYoutubeField");
   const audioField = document.querySelector("#itemAudioField");
   const bookField = document.querySelector("#itemBookField");
+  const liveField = document.querySelector("#itemLiveField");
   const bodyField = document.querySelector("#itemBodyField");
   const previewOptions = contentForm.querySelector(".preview-options");
   const categoryInput = document.querySelector("#itemCategory");
@@ -1428,6 +1575,7 @@ function updateContentTypeFields(syncCategory = false) {
   youtubeField.hidden = !["video", "pack"].includes(type);
   audioField.hidden = !["audio", "pack"].includes(type);
   bookField.hidden = !["book", "pack"].includes(type);
+  liveField.hidden = type !== "live";
   bodyField.hidden = !["book", "thought", "pack"].includes(type);
   previewOptions.hidden = !["video", "audio", "pack"].includes(type);
 
@@ -1436,7 +1584,8 @@ function updateContentTypeFields(syncCategory = false) {
     audio: "Sube el archivo de audio que escucharan las alumnas.",
     book: "Sube un PDF o EPUB y anade, si quieres, una introduccion.",
     thought: "Escribe el pensamiento completo. No necesita ningun archivo.",
-    pack: "El pack reune un video de YouTube, un audio y un libro en una sola compra."
+    pack: "Reune uno o varios recursos en una sola compra. Puedes combinar video, audios y libro.",
+    live: "Anade el enlace privado de Zoom, Meet u otra plataforma. Las personas suscritas acceden sin coste adicional."
   };
   help.textContent = helpMessages[type] || "";
 
@@ -1446,14 +1595,31 @@ function updateContentTypeFields(syncCategory = false) {
   }
 }
 
+function applyCommercialOffer(code) {
+  const offer = commercialOffers.find((entry) => entry.code === code);
+  if (!offer) return;
+
+  document.querySelector("#itemTitle").value = offer.title;
+  document.querySelector("#itemDescription").value = offer.description;
+  document.querySelector("#itemType").value = offer.type;
+  document.querySelector("#itemCategory").value = offer.category;
+  document.querySelector("#itemPrice").value = offer.price;
+  document.querySelector("#itemAccessDays").value = offer.accessDays;
+  document.querySelector("#itemPremium").checked = true;
+  document.querySelector("#itemIncludedInSubscription").checked = offer.includedInSubscription;
+  updateContentTypeFields();
+}
+
 function resetContentEditor() {
   editingItemId = null;
   contentForm.reset();
   contentFormTitle.textContent = "Subir contenido";
   contentSubmitButton.textContent = "Guardar contenido";
   cancelEditButton.hidden = true;
-  document.querySelector("#itemAudioStatus").textContent = "MP3, M4A, WAV u otro formato de audio.";
+  document.querySelector("#itemAudioStatus").textContent = "Puedes seleccionar uno o varios archivos de audio.";
   document.querySelector("#itemBookStatus").textContent = "PDF o EPUB.";
+  document.querySelector("#itemAccessDays").value = 0;
+  document.querySelector("#itemIncludedInSubscription").checked = false;
   updateContentTypeFields();
 }
 
@@ -1464,7 +1630,7 @@ function editContentItem(item) {
   contentForm.reset();
   const assets = normalizeItemAssets(item);
   const videoAsset = assets.find((asset) => asset.type === "video");
-  const audioAsset = assets.find((asset) => asset.type === "audio");
+  const audioAssets = assets.filter((asset) => asset.type === "audio");
   const bookAsset = assets.find((asset) => asset.type === "document");
 
   document.querySelector("#itemTitle").value = item.title || "";
@@ -1475,13 +1641,17 @@ function editContentItem(item) {
   document.querySelector("#itemLevel").value = item.level || "Principiante";
   document.querySelector("#itemDuration").value = item.duration || "";
   document.querySelector("#itemPrice").value = Number(item.price || 0);
+  document.querySelector("#itemOfferCode").value = item.offerCode || "";
+  document.querySelector("#itemAccessDays").value = Number(item.accessDays || 0);
   document.querySelector("#itemPremium").checked = Boolean(item.premium);
+  document.querySelector("#itemIncludedInSubscription").checked = Boolean(item.includedInSubscription);
+  document.querySelector("#itemLiveUrl").value = item.liveUrl || "";
   document.querySelector("#itemPreview").checked = Boolean(item.previewEnabled);
   document.querySelector("#itemPreviewDuration").value = item.previewDuration || "";
   document.querySelector("#itemYoutubeUrl").value = youtubeVideoId(videoAsset?.url) ? videoAsset.url : "";
-  document.querySelector("#itemAudioStatus").textContent = audioAsset
-    ? `Audio actual: ${audioAsset.fileName}. Selecciona otro para sustituirlo.`
-    : "MP3, M4A, WAV u otro formato de audio.";
+  document.querySelector("#itemAudioStatus").textContent = audioAssets.length
+    ? `${audioAssets.length} audio${audioAssets.length === 1 ? "" : "s"} actual${audioAssets.length === 1 ? "" : "es"}. Selecciona nuevos archivos para sustituirlos.`
+    : "Puedes seleccionar uno o varios archivos de audio.";
   document.querySelector("#itemBookStatus").textContent = bookAsset
     ? `Libro actual: ${bookAsset.fileName}. Selecciona otro para sustituirlo.`
     : "PDF o EPUB.";
@@ -1693,6 +1863,7 @@ async function login(email, password) {
   user = upsertLocalUser(user);
   state.session = { email: normalizedEmail };
   saveState();
+  await syncCurrentUserAccess(user);
   updateHeader();
   showView("dashboard");
   window.location.hash = "dashboard";
@@ -1717,8 +1888,52 @@ function formatPrice(value) {
   return `${Number(value || 0).toFixed(2).replace(".", ",")} EUR`;
 }
 
+function formatAccessDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "la fecha indicada";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
 function subscriptionIsActive(user = currentUser()) {
   return Boolean(user?.premium && ["active", "trialing"].includes(user.subscriptionStatus));
+}
+
+function renderCommercialOffers() {
+  offerCatalogContainers.forEach((container) => {
+    if (!container) return;
+    container.innerHTML = commercialOffers.map((offer) => {
+      const item = state.items.find((entry) => entry.offerCode === offer.code);
+      const available = Boolean(item?.databaseId);
+      const unlocked = Boolean(item && canOpen(item));
+      const price = item?.price || offer.price;
+      const accessDays = item?.accessDays ?? offer.accessDays;
+      let action = '<button class="secondary-button" type="button" disabled>Proximamente</button>';
+
+      if (available && unlocked) {
+        action = `<button class="primary-button" type="button" data-open-item="${escapeHtml(item.id)}">Abrir contenido</button>`;
+      } else if (available) {
+        action = `<button class="primary-button" type="button" data-buy-item="${escapeHtml(item.id)}">Comprar ${escapeHtml(formatPrice(price))}</button>`;
+      }
+
+      return `
+        <article class="subscription-plan offer-card ${available ? "" : "unavailable"}">
+          <p class="eyebrow">${offer.code === "live-class" ? "Clase en directo" : "Compra unica"}</p>
+          <h3>${escapeHtml(offer.title)}</h3>
+          <p>${escapeHtml(offer.description)}</p>
+          <div class="offer-price-row">
+            <strong>${escapeHtml(formatPrice(price))}</strong>
+            <span>${accessDays > 0 ? `${escapeHtml(String(accessDays))} dias de acceso` : "Sin caducidad"}</span>
+          </div>
+          ${offer.includedInSubscription ? '<p class="offer-benefit">Gratis con una suscripcion activa.</p>' : ""}
+          ${action}
+        </article>
+      `;
+    }).join("");
+  });
 }
 
 function renderSubscriptionPlans() {
@@ -1728,7 +1943,7 @@ function renderSubscriptionPlans() {
     container.innerHTML = loadedSubscriptionPlans.map((plan) => `
       <article class="subscription-plan ${plan.available ? "" : "unavailable"}">
         <p class="eyebrow">${escapeHtml(plan.label)}</p>
-        <h3>${plan.available ? escapeHtml(formatPrice(plan.amount / 100)) : "Precio pendiente"}</h3>
+        <h3>${escapeHtml(formatPrice(plan.amount / 100))}</h3>
         <p>Renovacion automatica cada ${escapeHtml(plan.label)}.</p>
         <button class="primary-button" type="button" data-subscription-plan="${escapeHtml(plan.id)}"
           ${!plan.available || activeSubscription ? "disabled" : ""}>
@@ -1743,7 +1958,7 @@ function renderSubscriptionPlans() {
     if (subscriptionPlansError) {
       message.textContent = subscriptionPlansError;
     } else if (activeSubscription) {
-      message.textContent = "Tu suscripcion esta activa y tienes acceso completo a todo el contenido premium.";
+      message.textContent = "Tu suscripcion esta activa y tienes acceso ilimitado a meditaciones y clases incluidas.";
     } else if (loadedSubscriptionPlans.length === 0) {
       message.textContent = "Cargando planes...";
     } else if (loadedSubscriptionPlans.every((plan) => !plan.available)) {
@@ -1758,6 +1973,7 @@ function renderSubscriptionPlans() {
   if (manageSubscriptionButton) {
     manageSubscriptionButton.hidden = !subscriptionIsActive() || !currentUser()?.stripeCustomerId;
   }
+  renderCommercialOffers();
 }
 
 async function loadSubscriptionPlans() {
@@ -1775,7 +1991,8 @@ async function loadSubscriptionPlans() {
     subscriptionPlansError = "";
   } catch (error) {
     console.error("Could not load subscription plans:", error);
-    subscriptionPlansError = error.message || "No se pudieron cargar los planes.";
+    loadedSubscriptionPlans = fallbackSubscriptionPlans.map((plan) => ({ ...plan }));
+    subscriptionPlansError = "Los pagos no estan disponibles en este momento. Intentalo de nuevo en unos minutos.";
   }
   renderSubscriptionPlans();
 }
@@ -2063,7 +2280,22 @@ function openMediaViewer(item, preview = false) {
     mediaDialogBody.append(note);
   }
 
-  if (!preview && item.type === "thought") {
+  if (!preview && item.type === "live") {
+    if (!item.liveUrl) {
+      notify("El enlace de la clase todavia no esta disponible.");
+      return;
+    }
+    const intro = document.createElement("p");
+    intro.className = "media-preview-note";
+    intro.textContent = "El enlace se abrira en una pestana nueva. Entra unos minutos antes del comienzo.";
+    const link = document.createElement("a");
+    link.className = "primary-button document-link";
+    link.href = item.liveUrl;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Entrar en la clase en directo";
+    mediaDialogBody.append(intro, link);
+  } else if (!preview && item.type === "thought") {
     const body = document.createElement("div");
     body.className = "thought-body";
     String(item.body || item.description || "")
@@ -2099,7 +2331,9 @@ function openMediaViewer(item, preview = false) {
       block.className = "pack-resource";
       if (availableAssets.length > 1) {
         const heading = document.createElement("h3");
-        heading.textContent = asset.type === "video" ? "Video del pack" : "Audio del pack";
+        heading.textContent = asset.fileName && asset.fileName !== "YouTube"
+          ? asset.fileName
+          : asset.type === "video" ? "Video del pack" : "Audio del pack";
         block.append(heading);
       }
       block.append(createPlayableMedia(asset, item));
@@ -2446,14 +2680,23 @@ authForm.addEventListener("submit", (event) => {
 });
 
 document.querySelector("#itemType").addEventListener("change", () => updateContentTypeFields(true));
+document.querySelector("#itemOfferCode").addEventListener("change", (event) => {
+  applyCommercialOffer(event.target.value);
+});
+document.querySelector("#itemPremium").addEventListener("change", (event) => {
+  if (!event.target.checked) document.querySelector("#itemIncludedInSubscription").checked = false;
+});
 
 document.querySelector("#itemAudioFile").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
+  const files = [...event.target.files];
+  const file = files[0];
+  document.querySelector("#itemAudioStatus").textContent = files.length
+    ? `${files.length} audio${files.length === 1 ? "" : "s"} seleccionado${files.length === 1 ? "" : "s"}.`
+    : "Puedes seleccionar uno o varios archivos de audio.";
   const duration = await readMediaDuration(file);
   if (!duration) return;
 
-  document.querySelector("#itemDuration").value = duration;
-  document.querySelector("#itemAudioStatus").textContent = `Audio seleccionado: ${file.name}.`;
+  if (files.length === 1) document.querySelector("#itemDuration").value = duration;
   notify(`Duracion detectada: ${duration}.`);
 });
 
@@ -2699,11 +2942,15 @@ contentForm.addEventListener("submit", async (event) => {
   const type = document.querySelector("#itemType").value;
   const body = document.querySelector("#itemBody").value.trim();
   const youtubeUrl = document.querySelector("#itemYoutubeUrl").value.trim();
-  const audioFile = document.querySelector("#itemAudioFile").files[0] || null;
+  const audioFiles = [...document.querySelector("#itemAudioFile").files];
   const bookFile = document.querySelector("#itemBookFile").files[0] || null;
+  const liveUrl = document.querySelector("#itemLiveUrl").value.trim();
   const premiumInput = document.querySelector("#itemPremium");
+  const includedInSubscription = document.querySelector("#itemIncludedInSubscription").checked;
   const priceInput = document.querySelector("#itemPrice");
   const price = Number(priceInput.value || 0);
+  const accessDays = normalizeAccessDays(document.querySelector("#itemAccessDays").value);
+  const offerCode = document.querySelector("#itemOfferCode").value;
   const existingItem = editingItemId
     ? state.items.find((entry) => entry.id === editingItemId)
     : null;
@@ -2712,7 +2959,7 @@ contentForm.addEventListener("submit", async (event) => {
   const hasExistingAudio = existingAssets.some((asset) => asset.type === "audio");
   const hasExistingBook = existingAssets.some((asset) => asset.type === "document");
   const hasVideo = Boolean(youtubeVideoId(youtubeUrl)) || (!youtubeUrl && hasExistingVideo);
-  const hasAudio = Boolean(audioFile) || hasExistingAudio;
+  const hasAudio = audioFiles.length > 0 || hasExistingAudio;
   const hasBook = Boolean(bookFile) || hasExistingBook;
 
   if (!rawTitle) {
@@ -2752,15 +2999,31 @@ contentForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (type === "pack" && (!hasVideo || !hasAudio || !hasBook)) {
-    notify("El pack necesita un video de YouTube, un audio y un libro.");
+  if (type === "pack" && !hasVideo && !hasAudio && !hasBook) {
+    notify("Anade al menos un video, audio o libro al pack.");
     return;
+  }
+
+  if (type === "live") {
+    try {
+      const parsedLiveUrl = new URL(liveUrl);
+      if (!/^https?:$/.test(parsedLiveUrl.protocol)) throw new Error("invalid protocol");
+    } catch {
+      notify("Anade un enlace valido para la clase en directo.");
+      document.querySelector("#itemLiveUrl").focus();
+      return;
+    }
   }
 
   if (premiumInput.checked && price <= 0) {
     notify("Anade un precio individual mayor que 0 para publicar contenido premium.");
     priceInput.focus();
     priceInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  if (offerCode && state.items.some((entry) => entry.offerCode === offerCode && entry.id !== existingItem?.id)) {
+    notify("Esta plantilla comercial ya esta publicada. Edita el contenido existente.");
     return;
   }
 
@@ -2771,11 +3034,15 @@ contentForm.addEventListener("submit", async (event) => {
     description: document.querySelector("#itemDescription").value.trim(),
     body,
     type,
+    offerCode,
     category: document.querySelector("#itemCategory").value,
     level: document.querySelector("#itemLevel").value,
-    duration: document.querySelector("#itemDuration").value.trim() || (["book", "thought"].includes(type) ? "Lectura libre" : "Sin duracion"),
+    duration: document.querySelector("#itemDuration").value.trim() || (["book", "thought"].includes(type) ? "Lectura libre" : type === "live" ? "En directo" : "Sin duracion"),
     price,
+    accessDays,
     premium: premiumInput.checked,
+    includedInSubscription: premiumInput.checked && includedInSubscription,
+    liveUrl: type === "live" ? liveUrl : "",
     previewEnabled: document.querySelector("#itemPreview").checked && ["video", "audio", "pack"].includes(type),
     previewDuration: document.querySelector("#itemPreviewDuration").value.trim() || "2 min"
   };
@@ -2786,7 +3053,7 @@ contentForm.addEventListener("submit", async (event) => {
 
   try {
     const previousItemId = item.id;
-    item = await saveContentToDatabase(item, { youtubeUrl, audioFile, bookFile });
+    item = await saveContentToDatabase(item, { youtubeUrl, audioFiles, bookFile });
 
     if (wasEditing) {
       const itemIndex = state.items.findIndex((entry) => entry.id === previousItemId);

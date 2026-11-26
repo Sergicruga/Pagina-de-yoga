@@ -1,8 +1,7 @@
 export const subscriptionPlans = [
-  { id: "1-month", label: "1 mes", months: 1, environmentVariable: "STRIPE_PREMIUM_PRICE_1_MONTH" },
-  { id: "3-months", label: "3 meses", months: 3, environmentVariable: "STRIPE_PREMIUM_PRICE_3_MONTHS" },
-  { id: "6-months", label: "6 meses", months: 6, environmentVariable: "STRIPE_PREMIUM_PRICE_6_MONTHS" },
-  { id: "12-months", label: "12 meses", months: 12, environmentVariable: "STRIPE_PREMIUM_PRICE_12_MONTHS" }
+  { id: "1-month", label: "1 mes", months: 1, amount: 3150, environmentVariable: "STRIPE_PREMIUM_PRICE_1_MONTH" },
+  { id: "3-months", label: "3 meses", months: 3, amount: 8150, environmentVariable: "STRIPE_PREMIUM_PRICE_3_MONTHS" },
+  { id: "6-months", label: "6 meses", months: 6, amount: 14050, environmentVariable: "STRIPE_PREMIUM_PRICE_6_MONTHS" }
 ];
 
 export function stripePriceIdForPlan(planId) {
@@ -21,5 +20,5 @@ export function stripePriceMatchesPlan(price, plan) {
     && price.recurring?.interval === "month"
     && price.recurring.interval_count === plan.months
     && price.currency === "eur"
-    && Number(price.unit_amount) > 0);
+    && Number(price.unit_amount) === plan.amount);
 }

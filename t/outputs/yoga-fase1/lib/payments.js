@@ -200,6 +200,13 @@ export async function applyCheckoutSession(database, stripe, session) {
 
     const lessonId = session.metadata?.lessonId;
     if (!lessonId) throw new Error("La compra no contiene una leccion valida.");
+    const accessDurationDays = Math.max(0, Math.floor(Number(session.metadata?.accessDurationDays || 0)));
+    const purchasedAt = session.created
+      ? new Date(Number(session.created) * 1000)
+      : new Date();
+    const expiresAt = accessDurationDays > 0
+      ? new Date(purchasedAt.getTime() + (accessDurationDays * 24 * 60 * 60 * 1000)).toISOString()
+      : null;
     const paymentIntentId = stripeObjectId(session.payment_intent);
     const { error } = await database
       .from("lesson_purchases")
@@ -210,7 +217,8 @@ export async function applyCheckoutSession(database, stripe, session) {
         currency: String(session.currency || "eur").toUpperCase(),
         status: "paid",
         stripe_payment_intent_id: paymentIntentId,
-        purchased_at: new Date().toISOString()
+        purchased_at: purchasedAt.toISOString(),
+        expires_at: expiresAt
       }, {
         onConflict: "user_id,lesson_id"
       });
@@ -221,7 +229,8 @@ export async function applyCheckoutSession(database, stripe, session) {
       purchaseType,
       userId: user.id,
       email: user.email,
-      lessonId
+      lessonId,
+      expiresAt
     };
   }
 

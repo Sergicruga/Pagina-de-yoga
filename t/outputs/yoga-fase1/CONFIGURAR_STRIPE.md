@@ -6,12 +6,11 @@ La web ya contiene el flujo de compra individual y suscripcion. Para activarlo h
 
 1. Entra en Stripe con el modo de prueba activado.
 2. Crea un producto llamado, por ejemplo, `Reset Premium`.
-3. Anade cuatro precios recurrentes en EUR al mismo producto, con la frecuencia mensual indicada:
-   - 1 mes: intervalo `month`, cada 1 mes.
-   - 3 meses: intervalo `month`, cada 3 meses.
-   - 6 meses: intervalo `month`, cada 6 meses.
-   - 12 meses: intervalo `month`, cada 12 meses.
-4. Decide el importe de cada precio y copia sus identificadores `price_...`. La pagina muestra los importes configurados en Stripe; los planes sin precio configurado no se pueden comprar.
+3. Anade tres precios recurrentes en EUR al mismo producto:
+   - 31,50 EUR: intervalo `month`, cada 1 mes.
+   - 81,50 EUR: intervalo `month`, cada 3 meses.
+   - 140,50 EUR: intervalo `month`, cada 6 meses.
+4. Copia sus identificadores `price_...`. La pagina valida el periodo y el importe para evitar publicar un precio equivocado.
 5. Activa el portal de clientes de Stripe y permite gestionar metodos de pago y cancelar suscripciones. El boton de gestion de la cuenta abre este portal.
 
 Los precios individuales se toman directamente del campo `price_individual` de cada contenido guardado en Supabase.
@@ -25,7 +24,6 @@ STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PREMIUM_PRICE_1_MONTH=price_...
 STRIPE_PREMIUM_PRICE_3_MONTHS=price_...
 STRIPE_PREMIUM_PRICE_6_MONTHS=price_...
-STRIPE_PREMIUM_PRICE_12_MONTHS=price_...
 NEXT_PUBLIC_SUPABASE_URL=https://...supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
@@ -59,7 +57,7 @@ invoice.payment_failed
 
 ## 4. Probar las suscripciones
 
-Publica de nuevo despues de configurar los cuatro precios. Abre `Suscripcion`, selecciona un periodo e inicia sesion o crea una cuenta para continuar con Stripe Checkout. Tras confirmarse el pago, la cuenta obtiene acceso a todo el contenido premium mientras la suscripcion esta activa. Desde el espacio de la alumna se puede abrir el portal de Stripe para cancelar o gestionar la suscripcion.
+Publica de nuevo despues de configurar los tres precios. Abre `Suscripcion`, selecciona un periodo e inicia sesion o crea una cuenta para continuar con Stripe Checkout. Tras confirmarse el pago, la cuenta obtiene acceso a las meditaciones y clases marcadas como incluidas mientras la suscripcion esta activa. Desde el espacio de la alumna se puede abrir el portal de Stripe para cancelar o gestionar la suscripcion.
 
 En Stripe Checkout puede usarse la tarjeta de prueba `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC.
 

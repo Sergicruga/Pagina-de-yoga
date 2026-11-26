@@ -33,6 +33,7 @@ export default {
         subscriptionStatus: result.subscriptionStatus || null,
         stripeCustomerId: result.stripeCustomerId || null,
         premiumUntil: result.premiumUntil || null,
+        expiresAt: result.expiresAt || null,
         paymentStatus: session.payment_status,
         checkoutStatus: session.status
       });

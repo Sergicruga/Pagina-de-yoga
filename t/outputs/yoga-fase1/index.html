@@ -243,6 +243,7 @@
               <option value="book">Libros</option>
               <option value="thought">Pensamientos</option>
               <option value="pack">Packs</option>
+              <option value="live">Clases en directo</option>
             </select>
             <select id="categoryFilter" aria-label="Filtrar por categoria">
               <option value="all">Categorias</option>
@@ -250,6 +251,8 @@
               <option value="Meditacion">Meditacion</option>
               <option value="Respiracion">Respiracion</option>
               <option value="Relajacion">Relajacion</option>
+              <option value="Retos">Retos</option>
+              <option value="Directos">Directos</option>
               <option value="Sobre mi">Sobre mi</option>
             </select>
           </div>
@@ -261,11 +264,17 @@
         <div class="section-heading">
           <p class="eyebrow">Reset Premium</p>
           <h2>Elige tu plan</h2>
-          <p>Acceso completo a todos los videos y audios premium mientras tu suscripcion este activa.</p>
+          <p>Acceso ilimitado a meditaciones y clases mientras tu suscripcion este activa.</p>
         </div>
         <p class="subscription-notice">Los planes se renuevan automaticamente cada periodo. Puedes cancelar la renovacion desde tu espacio.</p>
         <p class="subscription-status-message" id="publicSubscriptionMessage" aria-live="polite">Cargando planes...</p>
         <div class="subscription-plans" id="publicSubscriptionPlans"></div>
+        <div class="offer-heading">
+          <p class="eyebrow">Compra unica</p>
+          <h2>Retos, packs y clases en directo</h2>
+          <p>Elige una propuesta concreta sin necesidad de suscribirte.</p>
+        </div>
+        <div class="subscription-plans offer-catalog" id="publicOfferCatalog"></div>
       </section>
 
       <section class="view content-band" id="view-contacto" data-view="contacto" hidden>
@@ -333,17 +342,33 @@
           <div class="panel-view student-only" id="panel-subscription" hidden>
             <div class="soft-panel subscription-dashboard">
               <p class="eyebrow">Reset Premium</p>
-              <h3 id="subscriptionPanelTitle">Accede a todo el contenido</h3>
-              <p id="subscriptionPanelDescription">Elige un periodo y disfruta de todos los videos y audios premium mientras tu plan este activo.</p>
+              <h3 id="subscriptionPanelTitle">Meditaciones y clases sin limites</h3>
+              <p id="subscriptionPanelDescription">Elige un periodo y disfruta de meditaciones y clases sin limites mientras tu plan este activo.</p>
               <button class="secondary-button" id="manageSubscriptionButton" type="button" hidden>Gestionar o cancelar suscripcion</button>
               <p class="subscription-status-message" id="dashboardSubscriptionMessage" aria-live="polite">Cargando planes...</p>
               <div class="subscription-plans" id="dashboardSubscriptionPlans"></div>
+              <div class="offer-heading compact">
+                <p class="eyebrow">Compra unica</p>
+                <h3>Retos, packs y directos</h3>
+              </div>
+              <div class="subscription-plans offer-catalog" id="dashboardOfferCatalog"></div>
             </div>
           </div>
 
           <div class="panel-view" id="panel-admin" hidden>
             <form class="admin-form" id="contentForm" novalidate>
               <h3 id="contentFormTitle">Subir contenido</h3>
+              <label>Plantilla comercial
+                <select id="itemOfferCode">
+                  <option value="">Contenido personalizado</option>
+                  <option value="challenge-21">Reto 21 dias: Compromiso contigo</option>
+                  <option value="meditation-7">Pack 7 dias de meditacion</option>
+                  <option value="meditation-14">Pack 14 dias de meditacion</option>
+                  <option value="conscious-breathing">Pack respiraciones conscientes</option>
+                  <option value="live-class">Clase en directo</option>
+                </select>
+                <small>Selecciona una plantilla para completar precio, caducidad y tipo automaticamente.</small>
+              </label>
               <label>Titulo obligatorio<input id="itemTitle" required placeholder="Clase suave de manana"></label>
               <label>Descripcion<textarea id="itemDescription" rows="3" placeholder="Breve descripcion"></textarea></label>
               <div class="form-grid">
@@ -354,6 +379,7 @@
                     <option value="book">Libro / PDF</option>
                     <option value="thought">Pensamiento</option>
                     <option value="pack">Pack de contenidos</option>
+                    <option value="live">Clase en directo</option>
                   </select>
                 </label>
                 <label>Categoria
@@ -362,6 +388,8 @@
                     <option>Meditacion</option>
                     <option>Respiracion</option>
                     <option>Relajacion</option>
+                    <option>Retos</option>
+                    <option>Directos</option>
                     <option>Sobre mi</option>
                   </select>
                 </label>
@@ -374,6 +402,7 @@
                 </label>
                 <label>Duracion<input id="itemDuration" placeholder="24 min"></label>
                 <label>Precio individual (obligatorio si es premium)<input id="itemPrice" type="number" min="0" step="0.5" placeholder="9"></label>
+                <label>Dias de acceso tras la compra<input id="itemAccessDays" type="number" min="0" step="1" placeholder="30"><small>Usa 0 para acceso sin caducidad.</small></label>
               </div>
               <label id="itemBodyField" hidden>Texto completo<textarea id="itemBody" rows="7" placeholder="Escribe aqui el pensamiento, introduccion o contenido que quieras compartir"></textarea></label>
               <div class="content-source-grid">
@@ -382,16 +411,21 @@
                   <small>Puede ser un enlace normal, corto, Shorts o embed.</small>
                 </label>
                 <label id="itemAudioField" hidden>Archivo de audio
-                  <input id="itemAudioFile" type="file" accept="audio/*">
-                  <small id="itemAudioStatus">MP3, M4A, WAV u otro formato de audio.</small>
+                  <input id="itemAudioFile" type="file" accept="audio/*" multiple>
+                  <small id="itemAudioStatus">Puedes seleccionar uno o varios archivos de audio.</small>
                 </label>
                 <label id="itemBookField" hidden>Libro o documento
                   <input id="itemBookFile" type="file" accept=".pdf,.epub,application/pdf,application/epub+zip">
                   <small id="itemBookStatus">PDF o EPUB.</small>
                 </label>
+                <label id="itemLiveField" hidden>Enlace de la clase en directo
+                  <input id="itemLiveUrl" type="url" inputmode="url" placeholder="https://zoom.us/...">
+                  <small>Puede ser Zoom, Google Meet u otra plataforma.</small>
+                </label>
               </div>
               <p class="form-help" id="itemTypeHelp">El video se reproducira directamente dentro de la web.</p>
-              <label class="check-row"><input id="itemPremium" type="checkbox"> Marcar como premium</label>
+              <label class="check-row"><input id="itemPremium" type="checkbox"> Contenido de pago</label>
+              <label class="check-row"><input id="itemIncludedInSubscription" type="checkbox"> Incluido en la suscripcion</label>
               <div class="preview-options">
                 <label class="check-row"><input id="itemPreview" type="checkbox"> Permitir trailer para todos</label>
                 <label>Duracion del trailer<input id="itemPreviewDuration" placeholder="2 min"></label>
@@ -404,7 +438,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Titulo</th><th>Tipo</th><th>Acceso</th><th>Precio</th><th>Trailer</th><th>Acciones</th></tr>
+                  <tr><th>Titulo</th><th>Tipo</th><th>Acceso</th><th>Precio</th><th>Caducidad</th><th>Trailer</th><th>Acciones</th></tr>
                 </thead>
                 <tbody id="adminContentRows"></tbody>
               </table>

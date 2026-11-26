@@ -91,6 +91,11 @@ create table if not exists public.lessons (
   body text,
   is_premium boolean not null default false,
   price_individual numeric(10,2) not null default 0,
+  content_type text not null default 'video',
+  commercial_offer_code text,
+  access_duration_days integer not null default 0,
+  included_in_subscription boolean not null default false,
+  live_url text,
   preview_enabled boolean not null default false,
   preview_duration_seconds integer not null default 0,
   level text,
@@ -106,6 +111,11 @@ create table if not exists public.lessons (
 );
 
 alter table public.lessons add column if not exists price_individual numeric(10,2) default 0;
+alter table public.lessons add column if not exists content_type text default 'video';
+alter table public.lessons add column if not exists commercial_offer_code text;
+alter table public.lessons add column if not exists access_duration_days integer default 0;
+alter table public.lessons add column if not exists included_in_subscription boolean default false;
+alter table public.lessons add column if not exists live_url text;
 alter table public.lessons add column if not exists preview_enabled boolean default false;
 alter table public.lessons add column if not exists preview_duration_seconds integer default 0;
 alter table public.lessons add column if not exists duration_seconds integer;
@@ -113,12 +123,21 @@ alter table public.lessons add column if not exists thumbnail_url text;
 alter table public.lessons add column if not exists is_published boolean default true;
 
 update public.lessons set price_individual = 0 where price_individual is null;
+update public.lessons set content_type = 'video' where content_type is null;
+update public.lessons set access_duration_days = 0 where access_duration_days is null;
+update public.lessons set included_in_subscription = false where included_in_subscription is null;
 update public.lessons set preview_enabled = false where preview_enabled is null;
 update public.lessons set preview_duration_seconds = 0 where preview_duration_seconds is null;
 update public.lessons set is_published = true where is_published is null;
 
 alter table public.lessons alter column price_individual set default 0;
 alter table public.lessons alter column price_individual set not null;
+alter table public.lessons alter column content_type set default 'video';
+alter table public.lessons alter column content_type set not null;
+alter table public.lessons alter column access_duration_days set default 0;
+alter table public.lessons alter column access_duration_days set not null;
+alter table public.lessons alter column included_in_subscription set default false;
+alter table public.lessons alter column included_in_subscription set not null;
 alter table public.lessons alter column preview_enabled set default false;
 alter table public.lessons alter column preview_enabled set not null;
 alter table public.lessons alter column preview_duration_seconds set default 0;
@@ -128,6 +147,26 @@ alter table public.lessons alter column is_published set not null;
 
 do $$
 begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'lessons_content_type_valid'
+      and conrelid = 'public.lessons'::regclass
+  ) then
+    alter table public.lessons
+      add constraint lessons_content_type_valid
+      check (content_type in ('video', 'audio', 'book', 'thought', 'pack', 'live'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'lessons_access_duration_nonnegative'
+      and conrelid = 'public.lessons'::regclass
+  ) then
+    alter table public.lessons
+      add constraint lessons_access_duration_nonnegative
+      check (access_duration_days >= 0);
+  end if;
+
   if not exists (
     select 1 from pg_constraint
     where conname = 'lessons_price_nonnegative'
@@ -232,9 +271,12 @@ create table if not exists public.lesson_purchases (
   status text not null default 'pending',
   stripe_payment_intent_id text unique,
   purchased_at timestamptz not null default now(),
+  expires_at timestamptz,
   created_at timestamptz not null default now(),
   unique (user_id, lesson_id)
 );
+
+alter table public.lesson_purchases add column if not exists expires_at timestamptz;
 
 do $$
 begin
@@ -292,6 +334,9 @@ create index if not exists lessons_published_category_idx
   on public.lessons (is_published, category, published_at desc);
 create index if not exists lessons_premium_idx
   on public.lessons (is_premium);
+create unique index if not exists lessons_commercial_offer_code_unique
+  on public.lessons (commercial_offer_code)
+  where commercial_offer_code is not null;
 create index if not exists media_lesson_position_idx
   on public.media (lesson_id, position);
 create index if not exists purchases_user_status_idx
